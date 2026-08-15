@@ -29,6 +29,7 @@ const demoBooks = [
     isbn: '978-0201616224',
     coverColor: '#4a5568',
     summary: 'A catalog of practical, tool-agnostic habits for writing adaptable, DRY software, from source control discipline to pragmatic testing.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'Clean Code',
@@ -49,6 +50,7 @@ const demoBooks = [
     isbn: '978-0201633610',
     coverColor: '#805ad5',
     summary: 'The classic "Gang of Four" catalog of 23 reusable object-oriented design patterns for common software design problems.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'Clean Architecture',
@@ -69,6 +71,7 @@ const demoBooks = [
     isbn: '978-0321125217',
     coverColor: '#38a169',
     summary: 'Introduces a shared modeling language and strategic design patterns for tackling complexity in the heart of software.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'The C Programming Language',
@@ -89,6 +92,7 @@ const demoBooks = [
     isbn: '978-0134685991',
     coverColor: '#dd6b20',
     summary: '90 concrete items of advice for writing clear, correct, and efficient Java, grounded in real API design experience.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'Eloquent JavaScript',
@@ -109,6 +113,7 @@ const demoBooks = [
     isbn: '978-0201835953',
     coverColor: '#718096',
     summary: 'Essays on software project management drawn from the OS/360 project, including the famous observation that adding manpower to a late project makes it later.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'Introduction to Algorithms',
@@ -129,6 +134,7 @@ const demoBooks = [
     isbn: '978-0262510875',
     coverColor: '#6b46c1',
     summary: 'A foundational text on programming as the construction of abstractions, taught through Scheme, from MIT’s classic introductory course.',
+    pdfUrl: 'https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view',
   },
   {
     title: 'The Phoenix Project',
@@ -139,6 +145,37 @@ const demoBooks = [
     isbn: '978-1942788294',
     coverColor: '#d53f8c',
     summary: 'A novel about an IT manager rescuing a failing project, used to illustrate DevOps and The Three Ways in narrative form.',
+  },
+];
+
+const demoChangelog = [
+  {
+    version: '1.3.0',
+    date: '2026-08-15',
+    title: 'Profile menu and account page',
+    description:
+      "## What's new\n\n- The header now shows a **profile icon** that opens a dropdown menu.\n- A new **Account** page lets you view your profile details.\n- Language settings have moved from the header to the Account page.",
+  },
+  {
+    version: '1.2.0',
+    date: '2026-08-10',
+    title: 'Change log page',
+    description:
+      "## What's new\n\n- A **Change log** link is now available in the footer.\n- Change log entries support Markdown descriptions, so updates can include formatted lists, links, and headings.",
+  },
+  {
+    version: '1.1.0',
+    date: '2026-08-05',
+    title: 'Book collection and PDF reader',
+    description:
+      "## What's new\n\n- Browse the library collection with search and pagination.\n- View book details in a modal.\n- Open a dedicated PDF reader tab for books with an online copy.",
+  },
+  {
+    version: '1.0.0',
+    date: '2026-08-01',
+    title: 'Initial release',
+    description:
+      "## What's new\n\n- Login page with authentication.\n- Support for English and Brazilian Portuguese.\n- Responsive layout built with Vue 3, Vite, Pinia, and Vue Router.",
   },
 ];
 
@@ -168,7 +205,15 @@ async function main() {
     });
   }
 
-  console.log(`Seeded 1 user and ${demoBooks.length} books.`);
+  for (const entry of demoChangelog) {
+    await prisma.changelogEntry.upsert({
+      where: { version: entry.version },
+      update: entry,
+      create: entry,
+    });
+  }
+
+  console.log(`Seeded 1 user, ${demoBooks.length} books, and ${demoChangelog.length} changelog entries.`);
 }
 
 main()
