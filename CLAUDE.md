@@ -8,10 +8,14 @@ This is the backend for `library-portal` (a Vue 3 frontend). The API contract th
 implements lives in `documents/backend-api-specification.md`. Architectural decisions — and the
 alternatives rejected in favor of them — live in `documents/adr/`:
 
-- `ADR-0001-backend-technology-stack.md` — why Node/Express/SQLite/Prisma/JWT.
+- `ADR-0001-backend-technology-stack.md` — why Node/Express/Prisma/JWT.
 - `ADR-0002-jwt-logout-invalidation-strategy.md` — why `POST /auth/logout` uses a `jti` +
   `RevokedToken` denylist instead of client-only logout, short-lived tokens, Redis, or a
   per-user token-version claim.
+- `ADR-0003-database-postgresql-migration.md` — why the database moved from SQLite (ADR-0001's
+  original MVP choice) to PostgreSQL, and the docker-compose setup that came with it.
+- `ADR-0004-liquibase-migrations.md` — why schema migrations moved from Prisma Migrate to
+  Liquibase changelogs/changesets (Prisma Client/queries/seeding are unaffected).
 
 Read the relevant ADR before touching auth or making any other architectural change — most "why
 is this so minimal" or "why isn't this just X" questions are answered there.
@@ -19,13 +23,15 @@ is this so minimal" or "why isn't this just X" questions are answered there.
 ## Stack (do not swap without a new ADR)
 
 - Node.js 20, plain JavaScript (ES Modules) — no TypeScript.
-- Express for HTTP, Prisma + SQLite for persistence, `jsonwebtoken` + `bcryptjs` for auth.
+- Express for HTTP, Prisma Client + PostgreSQL for persistence (local dev via
+  `docker-compose.yml`), Liquibase for schema migrations, `jsonwebtoken` + `bcryptjs` for auth.
 - npm as the package manager. Vitest + Supertest for tests.
 
-If a change would swap any of these (e.g. SQLite → PostgreSQL, JS → TypeScript, Express →
-something else), write a new ADR explaining why before making the change. Several of these swaps
-are anticipated in ADR-0001's "Consequences" section as natural next steps — but the decision to
-actually make the jump belongs in a new ADR, not a silent dependency bump.
+If a change would swap any of these (e.g. Postgres → another database, Liquibase → another
+migration tool, JS → TypeScript, Express → something else), write a new ADR explaining why before
+making the change. Several of these swaps are anticipated in ADR-0001's, ADR-0003's, and
+ADR-0004's "Consequences" sections as natural next steps — but the decision to actually make the
+jump belongs in a new ADR, not a silent dependency bump.
 
 ## Conventions
 
@@ -57,30 +63,36 @@ actually make the jump belongs in a new ADR, not a silent dependency bump.
   model and field names stay camelCase (`fullName`, `coverColor`, ...) to match idiomatic JS and
   the JSON API contract — the frontend has always received (and must keep receiving) camelCase
   fields regardless of how the database stores them. When adding a model/field: give the Prisma
-  side a normal camelCase name and add the matching snake_case `@map`/`@@map`; don't let the two
-  drift, and don't write raw SQL that assumes one casing without checking `schema.prisma` first.
+  side a normal camelCase name with the matching snake_case `@map`/`@@map`, **and** add the
+  matching column/table DDL to the relevant `liquibase/changesets/*.sql` file (snake_case there
+  too) — since ADR-0004, Prisma no longer generates migrations from `schema.prisma`, so these two
+  files only stay in sync if you edit both by hand. Don't write raw SQL elsewhere that assumes one
+  casing without checking `schema.prisma` first.
 
 ## Running things
 
 - `npm run dev` — start with file-watch reload.
-- `npm test` — run the Vitest suite against a disposable SQLite database created fresh by
-  `tests/global-setup.js`. Tests hit the real Express app and a real database through Prisma; don't
-  add mocking of Prisma or the database into these tests.
-- `npx prisma migrate dev --name <change>` — create and apply a migration after editing
-  `prisma/schema.prisma`. This requires an interactive TTY; in a non-interactive shell (e.g. an
-  agent session) it fails outright, including with `--create-only`. In that case, hand-write the
-  migration folder (`prisma/migrations/<UTC-timestamp>_<name>/migration.sql`, timestamp from
-  `date -u +%Y%m%d%H%M%S`) and apply it with `npx prisma migrate deploy` (non-interactive), then
-  `npx prisma generate`. For column/table renames specifically, prefer real `ALTER TABLE ... RENAME
-  COLUMN`/`RENAME TO` statements over Prisma's default add-new-drop-old diff — the latter loses
-  data when the table already has rows, which `migrate dev` will itself refuse to do for that
-  reason.
-- **This project has not shipped/deployed yet — there is only ever one migration
-  (`prisma/migrations/20260809184115_init/`).** Until that changes, don't add a second migration
-  folder for a schema tweak: edit `20260809184115_init/migration.sql` directly (and
-  `prisma/schema.prisma` to match), then reset the local `dev.db`/`test.db` (both gitignored,
-  disposable) and reapply. Only start creating separate incremental migrations once this has a
-  real deployment history that a squash would need to rewrite.
+- `npm test` — run the Vitest suite against a disposable `library_test` PostgreSQL database
+  (requires `docker compose up -d db`; see `docker-compose.yml` / `docker/init-test-db.sh`),
+  reset fresh on every run by `tests/global-setup.js`. Tests hit the real Express app and a real
+  database through Prisma; don't add mocking of Prisma or the database into these tests.
+- `npm run db:migrate` — applies the Liquibase changelog (`liquibase/changelog-master.yaml` →
+  `liquibase/changesets/*.sql`) to the `library` database via the `liquibase` Docker service
+  (`docker compose run --rm liquibase update`; requires `docker compose up -d db` first, and
+  Docker generally — there is no local/JVM Liquibase install in this project, see ADR-0004). After
+  changing schema, also run `npx prisma generate` so the Prisma Client picks up the corresponding
+  `prisma/schema.prisma` edit.
+- **This project has not shipped/deployed yet — there is only one set of changesets**
+  (`liquibase/changesets/00N-*.sql`, one file per table). Until that changes, don't add new
+  changeset files for a schema tweak: edit the relevant existing file directly (and
+  `prisma/schema.prisma` to match), then rebuild both local databases from scratch rather than
+  trying to layer a change on top — Liquibase checksums an already-applied changeset and will
+  refuse to reapply it if its SQL changed. For `library_test`, `scripts/migrate-test-db.sh` (used
+  by `tests/global-setup.js`) already does this (`liquibase drop-all --force && liquibase
+  update`) on every test run. For `library`, run the same two commands by hand against it (or just
+  drop/recreate the `library` database via `psql` and rerun `npm run db:migrate`). Only start
+  appending new changeset files once this has a real deployment history that an edit-in-place
+  would need to rewrite.
 - `npm run db:studio` — inspect local data via Prisma Studio.
 
 ## Adding endpoints
@@ -101,8 +113,9 @@ actually make the jump belongs in a new ADR, not a silent dependency bump.
 - Don't add a validation library, alternate ORM, or auth framework "for later" — the current scope
   is intentionally minimal per ADR-0001's rejected-alternatives section. Raise it with the user
   before introducing a new category of dependency.
-- Don't commit `prisma/dev.db`, `prisma/test.db`, `.env`, or anything under a Docker-mounted
-  `data/` directory — all already gitignored.
+- Don't commit `.env` — already gitignored. The Postgres data directory lives in a Docker-managed
+  named volume (`db-data` in `docker-compose.yml`), not a bind-mounted project path, so there's
+  nothing database-related to gitignore anymore.
 - Don't change the bearer-token / `Authorization` header auth model to cookies or sessions — the
   frontend's HTTP client is already built around reading a token from `localStorage` and sending it
   as `Authorization: Bearer <token>` on every request.
