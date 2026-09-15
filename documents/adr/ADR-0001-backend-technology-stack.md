@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted — 2026-08-09
+Accepted — 2026-08-09. The "Database" choice (SQLite) was superseded by
+[ADR-0003](ADR-0003-database-postgresql-migration.md) on 2026-08-15; the rest of this ADR still
+stands.
 
 ## Context
 

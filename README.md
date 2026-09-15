@@ -114,9 +114,11 @@ docker compose up -d db     # if not already running
 npm test
 ```
 
-Runs the Vitest suite against a disposable `library_test` Postgres database. `tests/global-setup.js`
-rebuilds it from the Liquibase changelog on every run via `scripts/migrate-test-db.sh`
-(`liquibase drop-all` + `update`), so each run starts from a known-empty schema. Tests exercise
+Runs the Vitest suite against a disposable `library_test` Postgres database (provisioned
+alongside the main `library` database by `docker/init-test-db.sh` the first time the `db`
+container initializes its volume). `tests/global-setup.js` rebuilds it from the Liquibase
+changelog on every run via `scripts/migrate-test-db.sh` (`liquibase drop-all` + `update`), so each
+run starts from a known-empty schema regardless of what a previous run left behind. Tests exercise
 the real Express app and a real database through Prisma — nothing is mocked.
 
 ### Unit tests
@@ -160,7 +162,7 @@ different demo account. `DATABASE_URL` and `JWT_SECRET` have no defaults in the 
 itself from the `POSTGRES_*` variables.
 
 To run just the database (e.g. for local `npm run dev` / `npm test` against a host-run API), use
-`docker compose up -d db` instead.
+`docker compose up -d db` instead — see [Setup](#setup) and [Testing](#testing) above.
 
 ## Project structure
 
