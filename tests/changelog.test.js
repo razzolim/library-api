@@ -14,13 +14,13 @@ beforeAll(async () => {
         version: '1.0.0',
         date: '2026-08-01',
         title: 'Initial release',
-        description: '## What\'s new\n\n- Login page.',
+        description: "## What's new\n\n- Login page.",
       },
       {
         version: '1.1.0',
         date: '2026-08-05',
         title: 'Book collection',
-        description: '## What\'s new\n\n- Browse the library collection.',
+        description: "## What's new\n\n- Browse the library collection.",
       },
     ],
   });
@@ -39,7 +39,9 @@ describe('GET /api/changelog', () => {
   });
 
   it('returns changelog entries newest first', async () => {
-    const res = await request(app).get('/api/changelog').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/changelog')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
