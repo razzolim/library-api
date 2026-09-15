@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-library}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-library}
+      POSTGRES_DB: ${POSTGRES_DB:-library}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-library} -d ${POSTGRES_DB:-library}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  liquibase:
+    image: liquibase/liquibase:4.29-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./liquibase:/liquibase/changelog
+    environment:
+      LIQUIBASE_COMMAND_URL: "jdbc:postgresql://db:5432/${POSTGRES_DB:-library}"
+      LIQUIBASE_COMMAND_USERNAME: ${POSTGRES_USER:-library}
+      LIQUIBASE_COMMAND_PASSWORD: ${POSTGRES_PASSWORD:-library}
+      LIQUIBASE_COMMAND_CHANGELOG_FILE: changelog-master.yaml
+    command: ["update"]
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      liquibase:
+        condition: service_completed_successfully
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:-library}@db:5432/${POSTGRES_DB:-library}"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before running docker compose}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DEMO_USER_USERNAME: ${DEMO_USER_USERNAME:-reader}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-reader}
+      DEMO_USER_FULL_NAME: ${DEMO_USER_FULL_NAME:-Demo Reader}
+      DEMO_USER_ROLE: ${DEMO_USER_ROLE:-reader}
+
+volumes:
+  db-data:

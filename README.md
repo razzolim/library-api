@@ -5,21 +5,25 @@ Backend service for the `library-portal` frontend. It implements the MVP contrac
 technology and design decisions behind this implementation, and the alternatives that were
 considered and dropped, are documented in `documents/adr/`:
 
-- [`ADR-0001-backend-technology-stack.md`](documents/adr/ADR-0001-backend-technology-stack.md) — stack choice (Node/Express/SQLite/Prisma/JWT).
+- [`ADR-0001-backend-technology-stack.md`](documents/adr/ADR-0001-backend-technology-stack.md) — stack choice (Node/Express/Prisma/JWT).
 - [`ADR-0002-jwt-logout-invalidation-strategy.md`](documents/adr/ADR-0002-jwt-logout-invalidation-strategy.md) — how `POST /auth/logout` actually invalidates a token.
+- [`ADR-0003-database-postgresql-migration.md`](documents/adr/ADR-0003-database-postgresql-migration.md) — why the database moved from SQLite to PostgreSQL.
+- [`ADR-0004-liquibase-migrations.md`](documents/adr/ADR-0004-liquibase-migrations.md) — why schema migrations moved from Prisma Migrate to Liquibase changelogs/changesets.
 
 ## Stack
 
 - Node.js 20 (JavaScript, ES Modules — no TypeScript)
 - Express
-- SQLite + Prisma
+- PostgreSQL + Prisma (client/queries) + Liquibase (schema migrations)
 - JWT (`jsonwebtoken`) + `bcryptjs` for password hashing
 - Vitest + Supertest for tests
 
 **Naming convention:** database tables/columns are snake_case (`user`, `full_name`,
 `cover_color`, ...); everything above the ORM — Prisma model/field names, JSON request/response
 bodies — stays camelCase, matching the API contract in `documents/backend-api-specification.md`.
-The mapping lives entirely in `prisma/schema.prisma` (`@@map`/`@map`).
+The mapping lives in `prisma/schema.prisma` (`@@map`/`@map`); the actual DDL that creates those
+snake_case tables/columns lives in `liquibase/changesets/` — the two are kept in sync by hand (see
+ADR-0004).
 
 ## Endpoints (MVP)
 
@@ -47,7 +51,9 @@ Full request/response schemas, error formats, and the data model are documented 
 ```bash
 npm install
 cp .env.example .env        # edit JWT_SECRET at minimum
-npx prisma migrate dev --name init
+docker compose up -d db     # starts Postgres, published on localhost:5432
+npm run db:migrate          # applies the Liquibase changelog
+npx prisma generate         # (re)generates the Prisma Client from schema.prisma
 npm run db:seed
 npm run dev
 ```
@@ -59,7 +65,10 @@ The server listens on `http://localhost:3000` by default; all routes are mounted
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | HTTP port the server listens on. |
-| `DATABASE_URL` | `file:./dev.db` | SQLite connection string (Prisma), relative to `prisma/`. |
+| `DATABASE_URL` | *(required)* | PostgreSQL connection string (Prisma), e.g. `postgresql://library:library@localhost:5432/library`. |
+| `POSTGRES_USER` | `library` | Superuser created by the `db` service in `docker-compose.yml`. |
+| `POSTGRES_PASSWORD` | `library` | Password for `POSTGRES_USER`. Non-secret local-dev default — change it for anything beyond local dev. |
+| `POSTGRES_DB` | `library` | Database name created by the `db` service; matches the database segment of `DATABASE_URL`. |
 | `JWT_SECRET` | *(required)* | Secret used to sign and verify bearer tokens. |
 | `JWT_EXPIRES_IN` | `1h` | Token lifetime, in [`jsonwebtoken`'s `expiresIn` format](https://github.com/auth0/node-jsonwebtoken#usage). |
 | `CORS_ORIGIN` | `http://localhost:5173` | Comma-separated list of allowed origins (the Vite dev server by default). |
@@ -90,33 +99,40 @@ idempotent (upsert-based) and safe to re-run.
 ## Testing
 
 ```bash
+docker compose up -d db     # if not already running
 npm test
 ```
 
-Runs the Vitest suite against a disposable SQLite database (`prisma/test.db`), rebuilt from the
-Prisma schema on every run via `tests/global-setup.js`. Tests exercise the real Express app and a
-real database through Prisma — nothing is mocked.
+Runs the Vitest suite against a disposable `library_test` Postgres database (provisioned
+alongside the main `library` database by `docker/init-test-db.sh` the first time the `db`
+container initializes its volume). `tests/global-setup.js` rebuilds it from the Liquibase
+changelog on every run via `scripts/migrate-test-db.sh` (`liquibase drop-all` + `update`), so each
+run starts from a known-empty schema regardless of what a previous run left behind. Tests exercise
+the real Express app and a real database through Prisma — nothing is mocked.
 
 ## Running with Docker
 
 ```bash
-docker build -t library-api .
-
-docker run --rm -p 3000:3000 \
-  -e JWT_SECRET=change-me \
-  -e CORS_ORIGIN=http://localhost:5173 \
-  -v library-api-data:/app/data \
-  library-api
+cp .env.example .env        # edit JWT_SECRET at minimum
+docker compose up -d
 ```
 
-On startup the container applies any pending Prisma migrations, re-runs the (idempotent) seed
-script, and then starts the server. Mount a volume over `/app/data` — that's where the SQLite
-file (`prod.db`) lives — so data persists across container restarts.
+`docker compose up -d` starts three services: `db` (Postgres, with a named volume so data
+persists across restarts), `liquibase` (applies the changelog in `liquibase/`, then exits), and
+`api` (built from the `Dockerfile`, waiting on `liquibase` to complete successfully before it
+starts). On startup the `api` container re-runs the (idempotent) seed script and then starts the
+server on the port from `.env` (`3000` by default).
 
-The image bakes in the same non-secret `reader`/`reader` demo defaults as `.env.example` for the
-four `DEMO_USER_*` variables, so the container seeds successfully without extra flags; override
-them with `-e DEMO_USER_USERNAME=...` etc. for a different demo account. `JWT_SECRET` has no
-default in the image on purpose — it must always be passed explicitly.
+Both services read their configuration from `.env` via `docker-compose.yml` (see the
+[environment variables](#environment-variables) table above). The image bakes in the same
+non-secret `reader`/`reader` demo defaults as `.env.example` for the four `DEMO_USER_*`
+variables, so the container seeds successfully without extra flags; override them in `.env` for a
+different demo account. `DATABASE_URL` and `JWT_SECRET` have no defaults in the image on purpose
+— `docker-compose.yml` requires `JWT_SECRET` to be set in `.env` and constructs `DATABASE_URL`
+itself from the `POSTGRES_*` variables.
+
+To run just the database (e.g. for local `npm run dev` / `npm test` against a host-run API), use
+`docker compose up -d db` instead — see [Setup](#setup) and [Testing](#testing) above.
 
 ## Project structure
 
@@ -133,14 +149,22 @@ library-api/
   prisma/
     schema.prisma          # User, Book, RevokedToken models (snake_case DB names via @@map/@map)
     seed.js               # idempotent demo data
+  liquibase/
+    changelog-master.yaml   # includeAll of changesets/ — the actual DDL source of truth
+    changesets/              # one SQL-formatted changeset file per table
   tests/
-    global-setup.js       # provisions the disposable test SQLite db
+    global-setup.js       # rebuilds the disposable test Postgres db (library_test) via Liquibase
     auth.test.js
     books.test.js
+  scripts/
+    migrate-test-db.sh     # drop-all + update against library_test, used by global-setup.js
   documents/
     backend-api-specification.md   # source API contract
     adr/                            # architecture decision records
+  docker/
+    init-test-db.sh        # provisions the library_test database in the db container
   Dockerfile
+  docker-compose.yml       # db (Postgres) + liquibase (migrations) + api services
   README.md
   CLAUDE.md
 ```

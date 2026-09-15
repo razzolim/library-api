@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "DATABASE_URL=\"file:./test.db\" JWT_SECRET=\"test-secret\" vitest --run",
-    "db:migrate": "prisma migrate dev",
+    "test": "DATABASE_URL=\"postgresql://library:library@localhost:5432/library_test\" JWT_SECRET=\"test-secret\" vitest --run",
+    "db:migrate": "docker compose run --rm liquibase update",
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio"
   },
