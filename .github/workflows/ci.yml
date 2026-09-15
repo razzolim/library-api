@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run unit tests
+        run: npm run test:unit
+        env:
+          JWT_SECRET: test-secret
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: library
+          POSTGRES_PASSWORD: library
+          POSTGRES_DB: library
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U library -d library"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Create library_test database
+        run: |
+          PGPASSWORD=library psql -h localhost -U library -d library \
+            -c "CREATE DATABASE library_test;"
+
+      - name: Run Liquibase migrations on library_test
+        run: |
+          docker run --rm \
+            --network host \
+            --entrypoint sh \
+            -w /liquibase/changelog \
+            -e LIQUIBASE_COMMAND_URL="jdbc:postgresql://localhost:5432/library_test" \
+            -e LIQUIBASE_COMMAND_USERNAME=library \
+            -e LIQUIBASE_COMMAND_PASSWORD=library \
+            -e LIQUIBASE_COMMAND_CHANGELOG_FILE=changelog-master.yaml \
+            -v "${{ github.workspace }}/liquibase:/liquibase/changelog" \
+            liquibase/liquibase:4.29-alpine \
+            -c "liquibase update"
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://library:library@localhost:5432/library_test
+          JWT_SECRET: test-secret
