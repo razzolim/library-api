@@ -103,7 +103,7 @@ Invalidates the bearer token that was used to make the request, so it can no lon
 
 - **Endpoint**: `POST /auth/logout`
 - **Authentication**: Required (`Authorization: Bearer <token>`).
-- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 4), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
+- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 5), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
 
 #### Request Body
 
@@ -238,6 +238,7 @@ Returns a single `Book` object with every field from the `List All Books` schema
 | Field | Type | Description |
 |---|---|---|
 | `summary` | string | Longer descriptive blurb for the book. Only returned here, not by `GET /books`. |
+| `pdfUrl` | string \| null | Embeddable URL for the PDF reader (e.g. a Google Drive `/view` link). Only returned here, not by `GET /books`. `null` when the book has no online copy — the frontend hides the "Read online" action in that case. |
 
 **Example Response:**
 
@@ -251,7 +252,8 @@ Returns a single `Book` object with every field from the `List All Books` schema
   "status": "available",
   "isbn": "978-0201616224",
   "coverColor": "#4a5568",
-  "summary": "A catalog of practical, tool-agnostic habits for writing adaptable, DRY software, from source control discipline to pragmatic testing."
+  "summary": "A catalog of practical, tool-agnostic habits for writing adaptable, DRY software, from source control discipline to pragmatic testing.",
+  "pdfUrl": "https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view"
 }
 ```
 
@@ -275,12 +277,68 @@ The mock originally returned `null` with HTTP 200 when the ID was not found. The
 
 - The endpoint must be protected by the authentication middleware.
 - The ID must be parsed as a numeric value; a non-numeric `id` is treated the same as "not found" (404, no body), not a 400/validation error.
-- On success, return the same fields as the `List All Books` endpoint, plus `summary`.
+- On success, return the same fields as the `List All Books` endpoint, plus `summary` and `pdfUrl`.
 - On a miss, return HTTP 404 with an empty body — do not send `null`, `{}`, or any JSON payload.
 
 ---
 
-## 4. Authentication Middleware
+## 4. Change Log
+
+### 4.1 List Changelog
+
+Returns the portal's release history, for the in-app changelog page/footer link.
+
+- **Endpoint**: `GET /changelog`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Returns an array of changelog entries, ordered newest first.
+
+#### Request Parameters
+
+None.
+
+#### Success Response (HTTP 200)
+
+Returns an array of `ChangelogEntry` objects.
+
+**ChangelogEntry Object Fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | number | Unique identifier. |
+| `version` | string | Version or release label (e.g., `"1.3.0"`). |
+| `date` | string | Display date, `YYYY-MM-DD`. |
+| `title` | string | Short update title. |
+| `description` | string | Markdown-formatted description. The frontend renders it as sanitized HTML. |
+
+**Example Response (truncated):**
+
+```json
+[
+  {
+    "id": 4,
+    "version": "1.3.0",
+    "date": "2026-08-15",
+    "title": "Profile menu and account page",
+    "description": "## What's new\n\n- The header now shows a **profile icon**..."
+  }
+]
+```
+
+#### Error Responses
+
+| HTTP Status | Description |
+|---|---|
+| 401 Unauthorized | Missing or invalid `Authorization` header. |
+| 500 Internal Server Error | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware.
+- The response must be a JSON array ordered with the newest entry first (by `date` descending).
+
+---
+
+## 5. Authentication Middleware
 
 The backend must inspect the `Authorization` header on every protected route.
 
@@ -298,11 +356,11 @@ The backend must inspect the `Authorization` header on every protected route.
 
 ---
 
-## 5. Data Model Summary
+## 6. Data Model Summary
 
 > **Naming note:** field names below (and throughout this document, and in every JSON request/response) are camelCase — that is the wire format the frontend expects and it does not change. The backend's own SQL tables and columns are named in snake_case internally (e.g. `full_name`, `cover_color`) purely as a storage-layer/SQL convention; this is an implementation detail behind the ORM and has no bearing on the API contract described here.
 
-### 5.1 User (Internal)
+### 6.1 User (Internal)
 
 Used only for authentication. The frontend never sees the `password` field.
 
@@ -314,7 +372,7 @@ Used only for authentication. The frontend never sees the `password` field.
 | `fullName` | string | Display name. |
 | `role` | string | e.g., `reader`, `admin`. |
 
-### 5.2 User (Public Profile)
+### 6.2 User (Public Profile)
 
 Returned by the login endpoint.
 
@@ -325,7 +383,7 @@ Returned by the login endpoint.
 | `fullName` | string |
 | `role` | string |
 
-### 5.3 Book
+### 6.3 Book
 
 | Field | Type | Constraints |
 |---|---|---|
@@ -338,8 +396,9 @@ Returned by the login endpoint.
 | `isbn` | string | Required, unique, valid ISBN format. |
 | `coverColor` | string | Hex color code (e.g., `#4a5568`). |
 | `summary` | string | Required, non-empty. Descriptive blurb. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
+| `pdfUrl` | string \| null | Optional. Embeddable PDF URL. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
 
-### 5.4 Revoked Token (Internal)
+### 6.4 Revoked Token (Internal)
 
 Server-side only — never exposed through any API response. Backs the `POST /auth/logout` endpoint; see `ADR-0002-jwt-logout-invalidation-strategy.md`.
 
@@ -350,13 +409,23 @@ Server-side only — never exposed through any API response. Backs the `POST /au
 | `expiresAt` | datetime | Copied from the token's `exp` claim; used to prune rows once the token would have expired naturally anyway. |
 | `createdAt` | datetime | When the logout happened. |
 
+### 6.5 Changelog Entry
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | number | Primary key, auto-increment. |
+| `version` | string | Required, unique. |
+| `date` | string | Required. Display date, `YYYY-MM-DD`. |
+| `title` | string | Required, non-empty. |
+| `description` | string | Required, non-empty. Markdown-formatted. |
+
 ---
 
-## 6. Seed Data Reference
+## 7. Seed Data Reference
 
 The frontend currently ships with the following mock data. The backend should provide at least this dataset for parity.
 
-### 6.1 Demo User
+### 7.1 Demo User
 
 ```json
 {
@@ -370,7 +439,7 @@ The frontend currently ships with the following mock data. The backend should pr
 
 > Note: Store the password as a hash in the real database; the plaintext value above is only for frontend login testing.
 
-### 6.2 Demo Books
+### 7.2 Demo Books
 
 The mock catalog contains 12 books covering the following genres:
 
@@ -381,11 +450,15 @@ The mock catalog contains 12 books covering the following genres:
 - Computer Science
 - DevOps
 
-Each book has the fields listed in the `Book` data model above, with `status` being either `available` or `borrowed`.
+Each book has the fields listed in the `Book` data model above, with `status` being either `available` or `borrowed`, and `pdfUrl` set for roughly half the catalog (the rest are `null`).
+
+### 7.3 Demo Changelog
+
+At least the four entries the frontend mock ships with (versions `1.0.0` through `1.3.0`), so the `/changelog` page has representative content. See `prisma/seed.js` for the exact entries.
 
 ---
 
-## 7. CORS and Local Development
+## 8. CORS and Local Development
 
 Because the frontend development server runs on a different port than the backend (usually `http://localhost:5173`), the backend must enable CORS for the frontend origin.
 
@@ -396,13 +469,14 @@ Allowed headers should include:
 
 ---
 
-## 8. Migration Notes from Mock to Real API
+## 9. Migration Notes from Mock to Real API
 
-When the backend is ready, the frontend only needs to change the implementation of these three functions in `src/api/books.js`:
+When the backend is ready, the frontend only needs to change the implementation of these functions in `src/api/books.js` and `src/api/changelog.js`:
 
 1. `authenticate({ username, password })` → `POST /auth/login`
 2. `fetchBooks()` → `GET /books`
 3. `fetchBookById(id)` → `GET /books/:id`
+4. `fetchChangelog()` → `GET /changelog`
 
 No changes are required in the views, components, store, or router, as long as the backend matches the schemas and authentication behavior described in this document — **with one exception**: `fetchBookById`'s not-found handling (see Section 3.2) must change from "inspect the body for `null`" to "treat HTTP 404 as not found," since the implemented backend returns 404 with no body instead of the mock's `null` + 200.
 
@@ -410,7 +484,7 @@ No changes are required in the views, components, store, or router, as long as t
 
 ---
 
-## 9. Future Endpoints (Not Required for MVP)
+## 10. Future Endpoints (Not Required for MVP)
 
 The following endpoints are not consumed by the current frontend but are natural next steps:
 
@@ -426,14 +500,16 @@ The following endpoints are not consumed by the current frontend but are natural
 
 ---
 
-## 10. Quick Checklist for Backend Implementation
+## 11. Quick Checklist for Backend Implementation
 
 - [ ] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
 - [ ] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
-- [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`).
-- [ ] `GET /books/:id` is protected and returns a `Book` object including `summary`, or HTTP 404 with no body if it doesn't exist.
+- [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
+- [ ] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
+- [ ] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
 - [ ] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
 - [ ] Passwords are stored hashed.
 - [ ] CORS is configured for the frontend origin.
 - [ ] The demo user `reader / reader` exists in the database.
 - [ ] The demo book catalog is seeded.
+- [ ] The demo changelog is seeded.

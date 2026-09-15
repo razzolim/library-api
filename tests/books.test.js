@@ -19,6 +19,7 @@ beforeAll(async () => {
         isbn: '978-0201616224',
         coverColor: '#4a5568',
         summary: 'A catalog of practical, tool-agnostic habits for writing adaptable software.',
+        pdfUrl: 'https://drive.google.com/file/d/example/view',
       },
       {
         title: 'Clean Code',
@@ -59,6 +60,7 @@ describe('GET /api/books', () => {
     expect(res.body).toHaveLength(2);
     expect(res.body[0]).toMatchObject({ title: 'The Pragmatic Programmer', status: 'available' });
     expect(res.body[0].summary).toBeUndefined();
+    expect(res.body[0].pdfUrl).toBeUndefined();
   });
 });
 
@@ -78,6 +80,7 @@ describe('GET /api/books/:id', () => {
     expect(res.body.id).toBe(id);
     expect(res.body.title).toBe('The Pragmatic Programmer');
     expect(res.body.summary).toBe('A catalog of practical, tool-agnostic habits for writing adaptable software.');
+    expect(res.body.pdfUrl).toBe('https://drive.google.com/file/d/example/view');
   });
 
   it('returns 404 with no body for a non-existent id', async () => {
