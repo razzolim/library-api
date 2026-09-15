@@ -5,20 +5,10 @@ Guidance for coding agents working in this repository.
 ## Project context
 
 This is the backend for `library-portal` (a Vue 3 frontend). The API contract this service
-implements lives in `documents/backend-api-specification.md`. Architectural decisions — and the
-alternatives rejected in favor of them — live in `documents/adr/`:
-
-- `ADR-0001-backend-technology-stack.md` — why Node/Express/Prisma/JWT.
-- `ADR-0002-jwt-logout-invalidation-strategy.md` — why `POST /auth/logout` uses a `jti` +
-  `RevokedToken` denylist instead of client-only logout, short-lived tokens, Redis, or a
-  per-user token-version claim.
-- `ADR-0003-database-postgresql-migration.md` — why the database moved from SQLite (ADR-0001's
-  original MVP choice) to PostgreSQL, and the docker-compose setup that came with it.
-- `ADR-0004-liquibase-migrations.md` — why schema migrations moved from Prisma Migrate to
-  Liquibase changelogs/changesets (Prisma Client/queries/seeding are unaffected).
-
-Read the relevant ADR before touching auth or making any other architectural change — most "why
-is this so minimal" or "why isn't this just X" questions are answered there.
+implements lives in `documents/backend-api-specification.md`. Architectural decisions live in
+`documents/adr/decisions.md` — read it before touching auth, the schema, or making any
+architectural change; most "why is this so minimal" or "why isn't this just X" questions are
+answered there.
 
 ## Stack (do not swap without a new ADR)
 
