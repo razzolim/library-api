@@ -103,7 +103,7 @@ Invalidates the bearer token that was used to make the request, so it can no lon
 
 - **Endpoint**: `POST /auth/logout`
 - **Authentication**: Required (`Authorization: Bearer <token>`).
-- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 5), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
+- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 6), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
 
 #### Request Body
 
@@ -178,6 +178,7 @@ Returns an array of `Book` objects.
 | `status` | string | Current status: `available` or `borrowed`. |
 | `isbn` | string | ISBN identifier. |
 | `coverColor` | string | Hex color code used by the frontend for placeholder styling. |
+| `isBookmarked` | boolean | Whether the authenticated user has bookmarked this book. Computed per-request against `req.user.id` — see Section 4 and Section 7.6. |
 
 Note: `summary` (see Section 3.2) is intentionally **not** included here — the list endpoint stays
 light since the frontend renders it as a catalog grid. Fetch `GET /books/:id` for the full detail
@@ -195,7 +196,8 @@ including `summary`.
     "genre": "Software Engineering",
     "status": "available",
     "isbn": "978-0201616224",
-    "coverColor": "#4a5568"
+    "coverColor": "#4a5568",
+    "isBookmarked": false
   }
 ]
 ```
@@ -213,6 +215,7 @@ including `summary`.
 - The response must be a JSON array.
 - The order of books should be stable.
 - All fields shown in the table must be present and non-null for the frontend to render correctly.
+- `isBookmarked` must reflect the requesting user (`req.user.id`) — never cached across users or requests.
 
 ---
 
@@ -252,6 +255,7 @@ Returns a single `Book` object with every field from the `List All Books` schema
   "status": "available",
   "isbn": "978-0201616224",
   "coverColor": "#4a5568",
+  "isBookmarked": true,
   "summary": "A catalog of practical, tool-agnostic habits for writing adaptable, DRY software, from source control discipline to pragmatic testing.",
   "pdfUrl": "https://drive.google.com/file/d/1cElC7xqVArPo9jZMWDksRHtIwCxSq-qi/view"
 }
@@ -277,14 +281,184 @@ The mock originally returned `null` with HTTP 200 when the ID was not found. The
 
 - The endpoint must be protected by the authentication middleware.
 - The ID must be parsed as a numeric value; a non-numeric `id` is treated the same as "not found" (404, no body), not a 400/validation error.
-- On success, return the same fields as the `List All Books` endpoint, plus `summary` and `pdfUrl`.
+- On success, return the same fields as the `List All Books` endpoint (including `isBookmarked`), plus `summary` and `pdfUrl`.
 - On a miss, return HTTP 404 with an empty body — do not send `null`, `{}`, or any JSON payload.
 
 ---
 
-## 4. Change Log
+## 4. Bookmarks
 
-### 4.1 List Changelog
+Lets a signed-in user save books to a personal list, independent of borrow/return status —
+bookmarking a book expresses "I want to come back to this," not "I'm currently reading this."
+
+### 4.1 List Bookmarked Books
+
+Returns the books the authenticated user has bookmarked.
+
+- **Endpoint**: `GET /bookmarks`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Returns an array of `Book` objects the current user has bookmarked, ordered
+  most-recently-bookmarked first. This is a filtered view of the catalog grid, not a detail page,
+  so it uses the same field set as `GET /books` (Section 3.1) — `summary` and `pdfUrl` are omitted
+  here too.
+
+#### Request Parameters
+
+None.
+
+#### Success Response (HTTP 200)
+
+Returns an array of `Book` objects, using the same fields as `List All Books` (Section 3.1),
+including `isBookmarked` — which is always `true` for every item in this response, by definition.
+
+**Example Response (truncated):**
+
+```json
+[
+  {
+    "id": 1,
+    "title": "The Pragmatic Programmer",
+    "author": "Andrew Hunt & David Thomas",
+    "year": 1999,
+    "genre": "Software Engineering",
+    "status": "available",
+    "isbn": "978-0201616224",
+    "coverColor": "#4a5568",
+    "isBookmarked": true
+  }
+]
+```
+
+#### Error Responses
+
+| HTTP Status | Description |
+|---|---|
+| 401 Unauthorized | Missing or invalid `Authorization` header. |
+| 500 Internal Server Error | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware.
+- The response must be scoped to `req.user.id` — never another user's bookmarks.
+- Order by the bookmark's `createdAt` descending (most recently bookmarked first), not by book
+  `id`.
+- Reuse the same `LIST_FIELDS` projection as `GET /books` (`src/services/books.service.js`) so a
+  future "heavy" Book field added there is automatically omitted here too, per the existing
+  list/detail split.
+
+---
+
+### 4.2 Bookmark a Book
+
+Marks a book as bookmarked for the authenticated user.
+
+- **Endpoint**: `POST /books/:id/bookmark`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Creates a bookmark linking the current user to the given book. Idempotent —
+  bookmarking a book the user has already bookmarked succeeds the same way a first-time bookmark
+  does, rather than returning a conflict error.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | number | The unique identifier of the book to bookmark. |
+
+#### Request Body
+
+None.
+
+#### Success Response (HTTP 200)
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | Always `true` on success. |
+| `isBookmarked` | boolean | Always `true` on success. |
+
+**Example Response:**
+
+```json
+{
+  "success": true,
+  "isBookmarked": true
+}
+```
+
+#### Error Responses
+
+| HTTP Status | Description |
+|---|---|
+| 401 Unauthorized | Missing or invalid `Authorization` header. |
+| 404 Not Found | Book with the given ID does not exist, or `id` is not a valid number. No response body — same convention as `GET /books/:id` (Section 3.2). |
+| 500 Internal Server Error | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware.
+- The `id` must be parsed and validated the same way as `GET /books/:id` (Section 3.2): a
+  non-numeric or missing book is a body-less 404, not a 400.
+- The write must be upsert-style (unique on `(userId, bookId)`, see Section 7.6) so a duplicate
+  bookmark request doesn't throw a unique-constraint error — this mirrors the idempotent-seed
+  convention already used in `prisma/seed.js`.
+
+---
+
+### 4.3 Remove a Bookmark
+
+Removes a bookmark the authenticated user previously created.
+
+- **Endpoint**: `DELETE /books/:id/bookmark`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Deletes the bookmark linking the current user to the given book, if one exists.
+  Idempotent — calling it on a book that isn't currently bookmarked by this user still succeeds.
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | number | The unique identifier of the book to un-bookmark. |
+
+#### Request Body
+
+None.
+
+#### Success Response (HTTP 200)
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | Always `true` on success. |
+| `isBookmarked` | boolean | Always `false` on success. |
+
+**Example Response:**
+
+```json
+{
+  "success": true,
+  "isBookmarked": false
+}
+```
+
+#### Error Responses
+
+| HTTP Status | Description |
+|---|---|
+| 401 Unauthorized | Missing or invalid `Authorization` header. |
+| 404 Not Found | Book with the given ID does not exist, or `id` is not a valid number. No response body — same convention as `GET /books/:id` (Section 3.2). |
+| 500 Internal Server Error | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware.
+- The delete must be scoped to `(req.user.id, id)` — a user can only ever remove their own
+  bookmark, and can never affect another user's.
+- A book that exists but was never bookmarked by this user (or was already unbookmarked) is not
+  an error case: respond `200` with `isBookmarked: false`, the same as a real removal.
+
+---
+
+## 5. Change Log
+
+### 5.1 List Changelog
 
 Returns the portal's release history, for the in-app changelog page/footer link.
 
@@ -338,7 +512,7 @@ Returns an array of `ChangelogEntry` objects.
 
 ---
 
-## 5. Authentication Middleware
+## 6. Authentication Middleware
 
 The backend must inspect the `Authorization` header on every protected route.
 
@@ -356,11 +530,11 @@ The backend must inspect the `Authorization` header on every protected route.
 
 ---
 
-## 6. Data Model Summary
+## 7. Data Model Summary
 
 > **Naming note:** field names below (and throughout this document, and in every JSON request/response) are camelCase — that is the wire format the frontend expects and it does not change. The backend's own SQL tables and columns are named in snake_case internally (e.g. `full_name`, `cover_color`) purely as a storage-layer/SQL convention; this is an implementation detail behind the ORM and has no bearing on the API contract described here.
 
-### 6.1 User (Internal)
+### 7.1 User (Internal)
 
 Used only for authentication. The frontend never sees the `password` field.
 
@@ -372,7 +546,7 @@ Used only for authentication. The frontend never sees the `password` field.
 | `fullName` | string | Display name. |
 | `role` | string | e.g., `reader`, `admin`. |
 
-### 6.2 User (Public Profile)
+### 7.2 User (Public Profile)
 
 Returned by the login endpoint.
 
@@ -383,7 +557,7 @@ Returned by the login endpoint.
 | `fullName` | string |
 | `role` | string |
 
-### 6.3 Book
+### 7.3 Book
 
 | Field | Type | Constraints |
 |---|---|---|
@@ -398,7 +572,11 @@ Returned by the login endpoint.
 | `summary` | string | Required, non-empty. Descriptive blurb. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
 | `pdfUrl` | string \| null | Optional. Embeddable PDF URL. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
 
-### 6.4 Revoked Token (Internal)
+> Note: `isBookmarked`, returned on both `GET /books` and `GET /books/:id` (Section 3), is **not**
+> a column on this table — it's computed per-request from the `Bookmark` join (Section 7.6) below,
+> scoped to `req.user.id`.
+
+### 7.4 Revoked Token (Internal)
 
 Server-side only — never exposed through any API response. Backs the `POST /auth/logout` endpoint; see `ADR-0002-jwt-logout-invalidation-strategy.md`.
 
@@ -409,7 +587,7 @@ Server-side only — never exposed through any API response. Backs the `POST /au
 | `expiresAt` | datetime | Copied from the token's `exp` claim; used to prune rows once the token would have expired naturally anyway. |
 | `createdAt` | datetime | When the logout happened. |
 
-### 6.5 Changelog Entry
+### 7.5 Changelog Entry
 
 | Field | Type | Constraints |
 |---|---|---|
@@ -419,13 +597,30 @@ Server-side only — never exposed through any API response. Backs the `POST /au
 | `title` | string | Required, non-empty. |
 | `description` | string | Required, non-empty. Markdown-formatted. |
 
+### 7.6 Bookmark (Internal)
+
+Join table between `User` and `Book`. Never returned directly by any endpoint — used to compute
+`isBookmarked` on `Book` objects (Section 3) and to resolve `GET /bookmarks` (Section 4.1).
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | number | Primary key. |
+| `userId` | number | Foreign key → `User.id`. |
+| `bookId` | number | Foreign key → `Book.id`. |
+| `createdAt` | datetime | When the bookmark was created; drives the ordering in `GET /bookmarks`. |
+
+- Unique constraint on `(userId, bookId)` — a user can bookmark a given book at most once. This is
+  what makes `POST /books/:id/bookmark` upsert-safe (Section 4.2).
+- Deleting a `Book` should cascade-delete its `Bookmark` rows (relevant once `DELETE /books/:id`,
+  Section 11, is implemented) so no bookmark can outlive the book it points to.
+
 ---
 
-## 7. Seed Data Reference
+## 8. Seed Data Reference
 
 The frontend currently ships with the following mock data. The backend should provide at least this dataset for parity.
 
-### 7.1 Demo User
+### 8.1 Demo User
 
 ```json
 {
@@ -439,7 +634,7 @@ The frontend currently ships with the following mock data. The backend should pr
 
 > Note: Store the password as a hash in the real database; the plaintext value above is only for frontend login testing.
 
-### 7.2 Demo Books
+### 8.2 Demo Books
 
 The mock catalog contains 12 books covering the following genres:
 
@@ -452,13 +647,20 @@ The mock catalog contains 12 books covering the following genres:
 
 Each book has the fields listed in the `Book` data model above, with `status` being either `available` or `borrowed`, and `pdfUrl` set for roughly half the catalog (the rest are `null`).
 
-### 7.3 Demo Changelog
+### 8.3 Demo Changelog
 
 At least the four entries the frontend mock ships with (versions `1.0.0` through `1.3.0`), so the `/changelog` page has representative content. See `prisma/seed.js` for the exact entries.
 
+### 8.4 Demo Bookmarks
+
+Not required. An empty bookmark list is a valid, testable state for the demo user, and no mock
+data exists to draw from (bookmarks are net-new — see Section 10). If seeding a couple of demo
+bookmarks for the `reader` user turns out to be useful for manual QA, add them the same
+upsert-idempotent way as the rest of `prisma/seed.js`.
+
 ---
 
-## 8. CORS and Local Development
+## 9. CORS and Local Development
 
 Because the frontend development server runs on a different port than the backend (usually `http://localhost:5173`), the backend must enable CORS for the frontend origin.
 
@@ -469,7 +671,7 @@ Allowed headers should include:
 
 ---
 
-## 9. Migration Notes from Mock to Real API
+## 10. Migration Notes from Mock to Real API
 
 When the backend is ready, the frontend only needs to change the implementation of these functions in `src/api/books.js` and `src/api/changelog.js`:
 
@@ -482,9 +684,15 @@ No changes are required in the views, components, store, or router, as long as t
 
 > **Logout is new.** The mocked frontend never had a logout call to migrate, so wiring up `POST /auth/logout` (Section 2.2) — clearing the stored token from `localStorage` and calling the endpoint — is net-new frontend work, not a swap of an existing mock function.
 
+> **Bookmarks are new.** The mocked frontend has no bookmark concept at all — no mock data, no
+> `isBookmarked` field, no starred/saved state. Wiring up `GET /bookmarks`, `POST /books/:id/bookmark`,
+> `DELETE /books/:id/bookmark` (Section 4), and rendering `isBookmarked` on the catalog grid, is
+> net-new frontend work in `library-portal` (e.g. a new `src/api/bookmarks.js` module), not a swap
+> of an existing mock function.
+
 ---
 
-## 10. Future Endpoints (Not Required for MVP)
+## 11. Future Endpoints (Not Required for MVP)
 
 The following endpoints are not consumed by the current frontend but are natural next steps:
 
@@ -500,13 +708,16 @@ The following endpoints are not consumed by the current frontend but are natural
 
 ---
 
-## 11. Quick Checklist for Backend Implementation
+## 12. Quick Checklist for Backend Implementation
 
 - [ ] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
 - [ ] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
-- [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
-- [ ] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
+- [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`), each including `isBookmarked` scoped to the requesting user.
+- [ ] `GET /books/:id` is protected and returns a `Book` object including `summary`, `pdfUrl`, and `isBookmarked`, or HTTP 404 with no body if it doesn't exist.
 - [ ] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
+- [ ] `GET /bookmarks` is protected and returns the current user's bookmarked books (list-shape, same fields as `GET /books`), newest-bookmarked first.
+- [ ] `POST /books/:id/bookmark` is protected, idempotent, upsert-safe, and returns `{ success: true, isBookmarked: true }`, or HTTP 404 with no body if the book doesn't exist.
+- [ ] `DELETE /books/:id/bookmark` is protected, idempotent, scoped to the requesting user, and returns `{ success: true, isBookmarked: false }`, or HTTP 404 with no body if the book doesn't exist.
 - [ ] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
 - [ ] Passwords are stored hashed.
 - [ ] CORS is configured for the frontend origin.
