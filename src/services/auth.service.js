@@ -42,3 +42,8 @@ export async function isTokenRevoked(jti) {
   const revoked = await prisma.revokedToken.findUnique({ where: { jti } });
   return revoked !== null;
 }
+
+export async function refreshToken(jti, exp, claims) {
+  await revokeToken(jti, exp);
+  return { token: signToken({ sub: claims.sub, username: claims.username, role: claims.role }) };
+}

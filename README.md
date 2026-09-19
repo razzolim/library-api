@@ -31,6 +31,7 @@ ADR-0004).
 |---|---|---|---|
 | `POST` | `/api/auth/login` | No | Exchanges `{ username, password }` for a bearer token and public user profile. |
 | `POST` | `/api/auth/logout` | Yes | Revokes the presented token so it can no longer be used, even before it expires. |
+| `POST` | `/api/auth/refresh` | Yes | Revokes the presented token and issues a fresh one with a reset expiry (token rotation). |
 | `GET` | `/api/books` | Yes | Returns the full book catalog as a JSON array. |
 | `GET` | `/api/books/:id` | Yes | Returns a single book (including `summary` and `pdfUrl`, which `GET /books` omits), or `404` with no body if the id doesn't exist. |
 | `GET` | `/api/changelog` | Yes | Returns the portal's release history, newest first. |
@@ -211,5 +212,4 @@ library-api/
 ## Future endpoints
 
 Not implemented in this MVP. Section 10 of `documents/backend-api-specification.md` lists the
-planned next steps: book CRUD (`POST`/`PUT`/`DELETE /books`), borrow/return, `GET /me`, and
-`POST /refresh`.
+planned next steps: book CRUD (`POST`/`PUT`/`DELETE /books`), borrow/return, and `GET /me`.

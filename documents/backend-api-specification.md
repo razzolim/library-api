@@ -139,6 +139,52 @@ None.
 
 ---
 
+### 2.3 Refresh Token
+
+Issues a fresh bearer token in exchange for a still-valid one, resetting the expiry window without requiring the user to re-enter credentials.
+
+- **Endpoint**: `POST /auth/refresh`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Validates the presented token exactly as any protected route does (signature, expiry, revocation check). On success, revokes the old token by recording its `jti` in the denylist — the same mechanism as `POST /auth/logout` — and signs and returns a brand-new token with a fresh `exp` and a new `jti`. The client must store the new token and use it on all subsequent requests; the old token is immediately invalid.
+
+#### Request Body
+
+None.
+
+#### Success Response (HTTP 200)
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | Always `true` on success. |
+| `token` | string | The new bearer token to use on all subsequent requests. |
+
+**Example Response:**
+
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### Error Responses
+
+| HTTP Status | Description |
+|---|---|
+| 401 Unauthorized | Missing, malformed, expired, or already-revoked token (standard Section 5 response). |
+| 500 Internal Server Error | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware — a token that has already expired or been revoked must be rejected before refresh logic runs, with the standard 401 (Section 5). There is no "grace period" beyond `exp`.
+- On success, revoke the incoming token's `jti` (via the same `revokeToken` path used by `POST /auth/logout`) before signing the new one, so concurrent calls with the same old token cannot each produce a valid new token.
+- The new token must be signed with `signToken` (`src/lib/jwt.js`) so it receives a fresh `jti`, the same TTL as a freshly-issued login token, and all claims (`id`, `username`, `role`) copied from the validated incoming token — no database read of the `User` row is needed.
+- The response carries only `token`; the user profile is unchanged and does not need to be re-sent.
+- The client must replace the token stored in `localStorage` under `library_portal_auth` with the new value and resume sending it as `Authorization: Bearer <new-token>` on all subsequent requests.
+- See `ADR-0002-jwt-logout-invalidation-strategy.md` for the rationale behind the `jti` denylist that this endpoint reuses, and the note that short-lived tokens and `/refresh` are complementary — if the token TTL is shortened, refresh calls simply become more frequent, not architecturally different.
+
+---
+
 ## 3. Books
 
 ### 3.1 List All Books
@@ -496,7 +542,6 @@ The following endpoints are not consumed by the current frontend but are natural
 | `/books/:id/borrow` | `POST` | Mark a book as borrowed (reader). |
 | `/books/:id/return` | `POST` | Mark a book as available (reader). |
 | `/me` | `GET` | Return the current user's profile. |
-| `/refresh` | `POST` | Refresh an expiring token. |
 
 ---
 
@@ -504,6 +549,7 @@ The following endpoints are not consumed by the current frontend but are natural
 
 - [ ] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
 - [ ] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
+- [ ] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
 - [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
 - [ ] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
 - [ ] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.

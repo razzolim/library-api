@@ -96,3 +96,62 @@ describe('POST /api/auth/logout', () => {
     expect(secondLogoutRes.status).toBe(401);
   });
 });
+
+describe('POST /api/auth/refresh', () => {
+  it('rejects requests without a token', async () => {
+    const res = await request(app).post('/api/auth/refresh');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with a new token', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const { token } = loginRes.body;
+
+    const refreshRes = await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${token}`);
+    expect(refreshRes.status).toBe(200);
+    expect(refreshRes.body.success).toBe(true);
+    expect(refreshRes.body.token).toEqual(expect.any(String));
+    expect(refreshRes.body.token).not.toBe(token);
+  });
+
+  it('revokes the old token after a successful refresh', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const { token: oldToken } = loginRes.body;
+
+    await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${oldToken}`);
+
+    const booksRes = await request(app).get('/api/books').set('Authorization', `Bearer ${oldToken}`);
+    expect(booksRes.status).toBe(401);
+  });
+
+  it('new token is usable on protected routes', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const { token: oldToken } = loginRes.body;
+
+    const refreshRes = await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${oldToken}`);
+    const { token: newToken } = refreshRes.body;
+
+    const booksRes = await request(app).get('/api/books').set('Authorization', `Bearer ${newToken}`);
+    expect(booksRes.status).toBe(200);
+  });
+
+  it('rejects a second refresh with the same (now-revoked) old token', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const { token } = loginRes.body;
+
+    await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${token}`);
+    const secondRefreshRes = await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${token}`);
+
+    expect(secondRefreshRes.status).toBe(401);
+  });
+
+  it('rejects a logged-out token', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const { token } = loginRes.body;
+
+    await request(app).post('/api/auth/logout').set('Authorization', `Bearer ${token}`);
+    const refreshRes = await request(app).post('/api/auth/refresh').set('Authorization', `Bearer ${token}`);
+
+    expect(refreshRes.status).toBe(401);
+  });
+});
