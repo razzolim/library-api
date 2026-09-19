@@ -3,10 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../services/auth.service.js', () => ({
   login: vi.fn(),
   revokeToken: vi.fn(),
+  refreshToken: vi.fn(),
 }));
 
 import * as authService from '../services/auth.service.js';
-import { login, logout } from './auth.controller.js';
+import { login, logout, refresh } from './auth.controller.js';
 
 function mockRes() {
   const res = {};
@@ -80,6 +81,26 @@ describe('logout controller', () => {
     authService.revokeToken.mockRejectedValue(err);
     const next = vi.fn();
     await logout({ user: { jti: 'jti-1', exp: 999 } }, mockRes(), next);
+    expect(next).toHaveBeenCalledWith(err);
+  });
+});
+
+describe('refresh controller', () => {
+  it('revokes the old token, returns 200 with new token', async () => {
+    authService.refreshToken.mockResolvedValue({ token: 'new-tok' });
+    const req = { user: { jti: 'old-jti', exp: 9999999, sub: 1, username: 'alice', role: 'reader' } };
+    const res = mockRes();
+    await refresh(req, res, vi.fn());
+    expect(authService.refreshToken).toHaveBeenCalledWith('old-jti', 9999999, { sub: 1, username: 'alice', role: 'reader' });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true, token: 'new-tok' });
+  });
+
+  it('calls next with the error when refreshToken throws', async () => {
+    const err = new Error('db error');
+    authService.refreshToken.mockRejectedValue(err);
+    const next = vi.fn();
+    await refresh({ user: { jti: 'jti-1', exp: 999, sub: 1, username: 'alice', role: 'reader' } }, mockRes(), next);
     expect(next).toHaveBeenCalledWith(err);
   });
 });

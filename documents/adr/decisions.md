@@ -23,13 +23,15 @@ Current decisions for library-api v1 (pre-release). Update this file — don't a
 
 ---
 
-## JWT Logout — `jti` Denylist
+## JWT Logout and Token Refresh — `jti` Denylist
 
 **Decision:** Every signed token carries a `jti` (UUID) claim. `POST /auth/logout` writes that `jti` + `exp` into a `RevokedToken` table. The `authenticate` middleware, after signature/expiry checks, does one indexed lookup by `jti` — a hit returns 401. Expired rows are pruned inside `revokeToken` on every logout call.
 
+`POST /auth/refresh` reuses the same denylist: the middleware validates the incoming token normally, then the endpoint revokes the old `jti` and signs a new token (fresh `jti` + `exp`, same `sub`/`username`/`role` claims — no user DB read needed). The old token is immediately invalid; the client replaces it in `localStorage`. This is token rotation: the blast radius of a stolen token is bounded by however frequently the client calls `/refresh`.
+
 **Why not the alternatives:**
 - *Client-only logout* — doesn't actually invalidate the JWT; anyone with a captured token can keep using it.
-- *Short-lived tokens + `/refresh`* — reduces blast radius but doesn't provide immediate revocation; complement this approach when `/refresh` is implemented, don't substitute it.
+- *Short-lived tokens alone* — reduces blast radius but doesn't provide immediate revocation on logout; `/refresh` and logout are now implemented as complements, not substitutes.
 - *Redis blocklist* — adds a second service to hold a handful of rows that an indexed Postgres table already handles in constant time at this scale.
 - *`tokenVersion` on `User`* — invalidates all sessions at once ("log out everywhere"), not the single session that called logout.
 

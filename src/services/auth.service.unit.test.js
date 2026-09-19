@@ -15,7 +15,7 @@ vi.mock('../lib/jwt.js', () => ({ signToken: vi.fn().mockReturnValue('signed-tok
 
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
-import { login, revokeToken, isTokenRevoked } from './auth.service.js';
+import { login, revokeToken, isTokenRevoked, refreshToken } from './auth.service.js';
 
 const DB_USER = {
   id: 1,
@@ -93,5 +93,23 @@ describe('isTokenRevoked', () => {
   it('returns false when the jti is not in the denylist', async () => {
     prisma.revokedToken.findUnique.mockResolvedValue(null);
     expect(await isTokenRevoked('jti-unknown')).toBe(false);
+  });
+});
+
+describe('refreshToken', () => {
+  beforeEach(() => {
+    prisma.revokedToken.deleteMany.mockResolvedValue({});
+    prisma.revokedToken.upsert.mockResolvedValue({});
+  });
+
+  it('revokes the old jti and returns a new signed token', async () => {
+    const { signToken } = await import('../lib/jwt.js');
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const result = await refreshToken('old-jti', exp, { sub: 1, username: 'alice', role: 'reader' });
+    expect(prisma.revokedToken.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { jti: 'old-jti' } })
+    );
+    expect(result.token).toBe('signed-token');
+    expect(signToken).toHaveBeenCalledWith({ sub: 1, username: 'alice', role: 'reader' });
   });
 });

@@ -29,3 +29,13 @@ export async function logout(req, res, next) {
     return next(err);
   }
 }
+
+export async function refresh(req, res, next) {
+  try {
+    const { jti, exp, sub, username, role } = req.user;
+    const result = await authService.refreshToken(jti, exp, { sub, username, role });
+    return res.status(200).json({ success: true, token: result.token });
+  } catch (err) {
+    return next(err);
+  }
+}
