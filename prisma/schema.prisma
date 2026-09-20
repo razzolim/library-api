@@ -12,11 +12,12 @@ datasource db {
 // idiomatic JS and the JSON API contract. Application code always uses the
 // camelCase field names below — the @map targets are a storage-only detail.
 model User {
-  id       Int    @id @default(autoincrement())
-  username String @unique
+  id       Int     @id @default(autoincrement())
+  username String  @unique
   password String
-  fullName String @map("full_name")
-  role     String @default("reader")
+  fullName String  @map("full_name")
+  role     String  @default("reader")
+  isActive Boolean @default(true) @map("is_active")
 
   @@map("user")
 }

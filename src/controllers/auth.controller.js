@@ -16,6 +16,9 @@ export async function login(req, res, next) {
 
     return res.status(200).json({ success: true, user: result.user, token: result.token });
   } catch (err) {
+    if (err.code === 'ACCOUNT_DEACTIVATED') {
+      return res.status(401).json({ success: false, errorKey: 'login.accountDeactivated' });
+    }
     return next(err);
   }
 }

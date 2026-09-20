@@ -1,5 +1,6 @@
 import { verifyToken } from '../lib/jwt.js';
 import { isTokenRevoked } from '../services/auth.service.js';
+import { isUserActive } from '../services/users.service.js';
 
 const UNAUTHORIZED_BODY = {
   error: 'Unauthorized',
@@ -30,6 +31,21 @@ export async function authenticate(req, res, next) {
     return next(err);
   }
 
+  try {
+    if (!(await isUserActive(payload.sub))) {
+      return res.status(401).json(UNAUTHORIZED_BODY);
+    }
+  } catch (err) {
+    return next(err);
+  }
+
   req.user = payload;
+  return next();
+}
+
+export function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden', message: 'Admin access required' });
+  }
   return next();
 }

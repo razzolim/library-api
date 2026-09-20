@@ -8,6 +8,12 @@ export async function login(username, password) {
     return null;
   }
 
+  if (!user.isActive) {
+    const err = new Error('Account is deactivated');
+    err.code = 'ACCOUNT_DEACTIVATED';
+    throw err;
+  }
+
   const passwordMatches = await bcrypt.compare(password, user.password);
   if (!passwordMatches) {
     return null;

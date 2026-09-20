@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import bcrypt from 'bcryptjs';
 import app from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
-import { signToken } from '../src/lib/jwt.js';
 
 let token;
 
 beforeAll(async () => {
   await prisma.changelogEntry.deleteMany();
+  await prisma.user.deleteMany({ where: { username: 'changelog-test-reader' } });
+
   await prisma.changelogEntry.createMany({
     data: [
       {
@@ -25,10 +27,23 @@ beforeAll(async () => {
     ],
   });
 
-  token = signToken({ sub: 1, username: 'reader', role: 'reader' });
+  await prisma.user.create({
+    data: {
+      username: 'changelog-test-reader',
+      password: await bcrypt.hash('changelog-pass', 10),
+      fullName: 'Changelog Test Reader',
+      role: 'reader',
+    },
+  });
+
+  const loginRes = await request(app)
+    .post('/api/auth/login')
+    .send({ username: 'changelog-test-reader', password: 'changelog-pass' });
+  token = loginRes.body.token;
 });
 
 afterAll(async () => {
+  await prisma.user.deleteMany({ where: { username: 'changelog-test-reader' } });
   await prisma.$disconnect();
 });
 

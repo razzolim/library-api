@@ -23,6 +23,7 @@ const DB_USER = {
   password: 'hashed',
   fullName: 'Alice Example',
   role: 'reader',
+  isActive: true,
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -37,6 +38,12 @@ describe('login', () => {
     prisma.user.findUnique.mockResolvedValue(DB_USER);
     bcrypt.compare.mockResolvedValue(false);
     expect(await login('alice', 'wrong')).toBeNull();
+  });
+
+  it('throws ACCOUNT_DEACTIVATED when the user is inactive', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...DB_USER, isActive: false });
+    await expect(login('alice', 'correct')).rejects.toMatchObject({ code: 'ACCOUNT_DEACTIVATED' });
+    expect(bcrypt.compare).not.toHaveBeenCalled();
   });
 
   it('returns token and public profile on success', async () => {

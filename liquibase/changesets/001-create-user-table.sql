@@ -6,7 +6,8 @@ CREATE TABLE "user" (
     "username" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "full_name" TEXT NOT NULL,
-    "role" TEXT NOT NULL DEFAULT 'reader'
+    "role" TEXT NOT NULL DEFAULT 'reader',
+    "is_active" BOOLEAN NOT NULL DEFAULT TRUE
 );
 --rollback DROP TABLE "user";
 
