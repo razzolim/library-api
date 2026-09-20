@@ -91,15 +91,8 @@ jobs:
       - name: Create library_test database
         run: PGPASSWORD=library psql -h localhost -U library -d library -c "CREATE DATABASE library_test;"
 
-      - name: Apply schema migrations
-        run: |
-          for f in $(ls liquibase/changesets/*.sql | sort); do
-            PGPASSWORD=library psql -h localhost -U library -d library_test -f "$f"
-          done
-
       - name: Run integration tests
         run: npm run test:integration
         env:
           DATABASE_URL: postgresql://library:library@localhost:5432/library_test
           JWT_SECRET: test-secret
-          SKIP_DB_MIGRATE: 'true'
