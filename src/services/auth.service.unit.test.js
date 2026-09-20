@@ -11,11 +11,17 @@ vi.mock('../lib/prisma.js', () => ({
   },
 }));
 vi.mock('bcryptjs', () => ({ default: { compare: vi.fn() } }));
-vi.mock('../lib/jwt.js', () => ({ signToken: vi.fn().mockReturnValue('signed-token') }));
+vi.mock('../lib/jwt.js', () => ({
+  signAccessToken: vi.fn().mockReturnValue('access-token'),
+  signRefreshToken: vi.fn().mockReturnValue('refresh-token'),
+  verifyToken: vi.fn(),
+  decodeToken: vi.fn().mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+}));
 
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
-import { login, revokeToken, isTokenRevoked, refreshToken } from './auth.service.js';
+import { signAccessToken, signRefreshToken, verifyToken } from '../lib/jwt.js';
+import { login, revokeToken, isTokenRevoked, refreshAccessToken } from './auth.service.js';
 
 const DB_USER = {
   id: 1,
@@ -24,6 +30,7 @@ const DB_USER = {
   fullName: 'Alice Example',
   role: 'reader',
   isActive: true,
+  locale: 'en',
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -46,17 +53,30 @@ describe('login', () => {
     expect(bcrypt.compare).not.toHaveBeenCalled();
   });
 
-  it('returns token and public profile on success', async () => {
+  it('returns accessToken, refreshToken and public profile on success', async () => {
     prisma.user.findUnique.mockResolvedValue(DB_USER);
     bcrypt.compare.mockResolvedValue(true);
     const result = await login('alice', 'correct');
-    expect(result.token).toBe('signed-token');
+    expect(result.accessToken).toBe('access-token');
+    expect(result.refreshToken).toBe('refresh-token');
+    expect(typeof result.expiresIn).toBe('number');
     expect(result.user).toEqual({
       id: 1,
       username: 'alice',
       fullName: 'Alice Example',
       role: 'reader',
+      locale: 'en',
     });
+  });
+
+  it('passes rememberMe to signRefreshToken', async () => {
+    prisma.user.findUnique.mockResolvedValue(DB_USER);
+    bcrypt.compare.mockResolvedValue(true);
+    await login('alice', 'correct', true);
+    expect(signRefreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ sub: 1, username: 'alice', role: 'reader' }),
+      true,
+    );
   });
 
   it('never includes the password in the returned user', async () => {
@@ -73,9 +93,7 @@ describe('revokeToken', () => {
     prisma.revokedToken.upsert.mockResolvedValue({});
     const exp = Math.floor(Date.now() / 1000) + 3600;
     await revokeToken('some-jti', exp);
-    expect(prisma.revokedToken.deleteMany).toHaveBeenCalledBefore
-      ? expect(prisma.revokedToken.deleteMany).toHaveBeenCalled()
-      : expect(prisma.revokedToken.deleteMany).toHaveBeenCalled();
+    expect(prisma.revokedToken.deleteMany).toHaveBeenCalled();
     expect(prisma.revokedToken.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { jti: 'some-jti' } })
     );
@@ -103,20 +121,54 @@ describe('isTokenRevoked', () => {
   });
 });
 
-describe('refreshToken', () => {
+describe('refreshAccessToken', () => {
+  const REFRESH_PAYLOAD = {
+    sub: 1,
+    username: 'alice',
+    role: 'reader',
+    type: 'refresh',
+    rememberMe: false,
+    jti: 'refresh-jti',
+    exp: Math.floor(Date.now() / 1000) + 7200,
+  };
+
   beforeEach(() => {
     prisma.revokedToken.deleteMany.mockResolvedValue({});
     prisma.revokedToken.upsert.mockResolvedValue({});
+    prisma.revokedToken.findUnique.mockResolvedValue(null);
+    verifyToken.mockReturnValue(REFRESH_PAYLOAD);
   });
 
-  it('revokes the old jti and returns a new signed token', async () => {
-    const { signToken } = await import('../lib/jwt.js');
-    const exp = Math.floor(Date.now() / 1000) + 3600;
-    const result = await refreshToken('old-jti', exp, { sub: 1, username: 'alice', role: 'reader' });
+  it('revokes the old refresh jti and returns new tokens', async () => {
+    const result = await refreshAccessToken('raw-refresh-token');
     expect(prisma.revokedToken.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { jti: 'old-jti' } })
+      expect.objectContaining({ where: { jti: 'refresh-jti' } })
     );
-    expect(result.token).toBe('signed-token');
-    expect(signToken).toHaveBeenCalledWith({ sub: 1, username: 'alice', role: 'reader' });
+    expect(result.accessToken).toBe('access-token');
+    expect(result.refreshToken).toBe('refresh-token');
+  });
+
+  it('throws INVALID_REFRESH_TOKEN when verifyToken throws', async () => {
+    verifyToken.mockImplementation(() => { throw new Error('bad'); });
+    await expect(refreshAccessToken('bad-token')).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+  });
+
+  it('throws INVALID_REFRESH_TOKEN when the token is not a refresh type', async () => {
+    verifyToken.mockReturnValue({ ...REFRESH_PAYLOAD, type: 'access' });
+    await expect(refreshAccessToken('wrong-type')).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+  });
+
+  it('throws INVALID_REFRESH_TOKEN when the refresh token is revoked', async () => {
+    prisma.revokedToken.findUnique.mockResolvedValue({ jti: 'refresh-jti' });
+    await expect(refreshAccessToken('revoked-token')).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+  });
+
+  it('passes rememberMe from the refresh token payload to signRefreshToken', async () => {
+    verifyToken.mockReturnValue({ ...REFRESH_PAYLOAD, rememberMe: true });
+    await refreshAccessToken('raw-refresh-token');
+    expect(signRefreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ sub: 1 }),
+      true,
+    );
   });
 });

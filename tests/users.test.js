@@ -32,12 +32,12 @@ beforeAll(async () => {
   const readerLogin = await request(app)
     .post('/api/auth/login')
     .send({ username: 'pw-reader', password: 'initial-pass' });
-  token = readerLogin.body.token;
+  token = readerLogin.body.accessToken;
 
   const adminLogin = await request(app)
     .post('/api/auth/login')
     .send({ username: 'pw-admin', password: 'admin-pass' });
-  adminToken = adminLogin.body.token;
+  adminToken = adminLogin.body.accessToken;
 });
 
 afterAll(async () => {
@@ -186,7 +186,7 @@ describe('PATCH /api/users/:id/deactivate', () => {
     const loginRes = await request(app)
       .post('/api/auth/login')
       .send({ username: 'pw-reader', password: 'initial-pass' });
-    const readerToken = loginRes.body.token;
+    const readerToken = loginRes.body.accessToken;
 
     const pwReader = await prisma.user.findUnique({ where: { username: 'pw-reader' } });
     await request(app)
@@ -283,7 +283,7 @@ describe('PATCH /api/users/me/password', () => {
     const adminLogin = await request(app)
       .post('/api/auth/login')
       .send({ username: 'pw-admin', password: 'admin-pass' });
-    const adminToken = adminLogin.body.token;
+    const adminToken = adminLogin.body.accessToken;
 
     const res = await request(app)
       .patch('/api/users/me/password')
@@ -291,5 +291,78 @@ describe('PATCH /api/users/me/password', () => {
       .send({ currentPassword: 'admin-pass', newPassword: 'admin-new-pass' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true });
+  });
+});
+
+describe('GET /api/me', () => {
+  it('returns 401 for unauthenticated requests', async () => {
+    const res = await request(app).get('/api/me');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns the user profile including locale', async () => {
+    const res = await request(app).get('/api/me').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: expect.any(Number),
+      username: 'pw-reader',
+      fullName: 'PW Reader',
+      role: 'reader',
+      locale: expect.any(String),
+      preferences: { locale: expect.any(String) },
+    });
+    expect(res.body.password).toBeUndefined();
+  });
+});
+
+describe('PATCH /api/me', () => {
+  it('returns 401 for unauthenticated requests', async () => {
+    const res = await request(app).patch('/api/me').send({ locale: 'en' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when locale is missing', async () => {
+    const res = await request(app)
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ success: false, errorKey: 'me.updateLocale.missingLocale' });
+  });
+
+  it('returns 400 for an unsupported locale', async () => {
+    const res = await request(app)
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ locale: 'de' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ success: false, errorKey: 'me.updateLocale.unsupportedLocale' });
+  });
+
+  it('updates the locale and returns the updated profile', async () => {
+    const res = await request(app)
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ locale: 'pt-BR' });
+    expect(res.status).toBe(200);
+    expect(res.body.locale).toBe('pt-BR');
+    expect(res.body.preferences).toEqual({ locale: 'pt-BR' });
+  });
+
+  it('locale returned by GET /me reflects the update', async () => {
+    await request(app)
+      .patch('/api/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ locale: 'en' });
+    const meRes = await request(app).get('/api/me').set('Authorization', `Bearer ${token}`);
+    expect(meRes.body.locale).toBe('en');
+  });
+
+  it('locale is returned in the login response', async () => {
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'pw-reader', password: 'changed-pass' });
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.user.locale).toEqual(expect.any(String));
   });
 });

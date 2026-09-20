@@ -4,6 +4,9 @@ import * as usersController from '../controllers/users.controller.js';
 
 const router = Router();
 
+router.get('/me', authenticate, usersController.getMe);
+router.patch('/me', authenticate, usersController.updateLocale);
+
 router.post('/users', authenticate, requireAdmin, usersController.createUser);
 router.patch('/users/:id/deactivate', authenticate, requireAdmin, usersController.deactivateUser);
 router.patch('/users/me/password', authenticate, usersController.changePassword);

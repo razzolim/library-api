@@ -64,6 +64,13 @@ describe('authenticate middleware', () => {
     expect(next).toHaveBeenCalledWith(dbError);
   });
 
+  it('returns 401 when the token has type refresh', async () => {
+    verifyToken.mockReturnValue({ ...PAYLOAD, type: 'refresh' });
+    const res = mockRes();
+    await authenticate(mockReq('Bearer refresh-token'), res, vi.fn());
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
   it('attaches the payload to req.user and calls next() for a valid token', async () => {
     const req = mockReq('Bearer valid-token');
     const next = vi.fn();

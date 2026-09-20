@@ -40,6 +40,45 @@ export async function deactivateUser(targetId) {
   await prisma.user.update({ where: { id: targetId }, data: { isActive: false } });
 }
 
+const SUPPORTED_LOCALES = ['en', 'pt-BR'];
+
+export async function getMe(userId) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    const err = new Error('User not found');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    locale: user.locale,
+    preferences: { locale: user.locale },
+  };
+}
+
+export async function updateLocale(userId, locale) {
+  if (!SUPPORTED_LOCALES.includes(locale)) {
+    const err = new Error('Unsupported locale');
+    err.code = 'UNSUPPORTED_LOCALE';
+    throw err;
+  }
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { locale },
+  });
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    locale: user.locale,
+    preferences: { locale: user.locale },
+  };
+}
+
 export async function changePassword(userId, currentPassword, newPassword) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
 

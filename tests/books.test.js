@@ -48,7 +48,7 @@ beforeAll(async () => {
   const loginRes = await request(app)
     .post('/api/auth/login')
     .send({ username: 'books-test-reader', password: 'books-pass' });
-  token = loginRes.body.token;
+  token = loginRes.body.accessToken;
 });
 
 afterAll(async () => {
