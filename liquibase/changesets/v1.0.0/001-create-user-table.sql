@@ -9,8 +9,5 @@ CREATE TABLE "user" (
     "role" TEXT NOT NULL DEFAULT 'reader',
     "is_active" BOOLEAN NOT NULL DEFAULT TRUE
 );
---rollback DROP TABLE "user";
-
---changeset razzolim:002-create-user-username-unique-index
 CREATE UNIQUE INDEX "user_username_key" ON "user"("username");
---rollback DROP INDEX "user_username_key";
+--rollback DROP INDEX "user_username_key"; DROP TABLE "user";
