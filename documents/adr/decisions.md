@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-Current decisions for library-api v1 (pre-release). Update this file — don't add new sections — until the project ships.
+Decisions made for library-api v1.0.0. Update this file in place for any new decisions until the project has a real deployment history that would make in-place edits unsafe.
 
 ---
 

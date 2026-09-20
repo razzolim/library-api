@@ -1,7 +1,6 @@
 # Library Portal Backend API Specification
 
-> Derived from the mocked frontend API calls in `src/api/books.js` and the HTTP client in `src/api/client.js`.
-> This document is intended to be used as the blueprint for implementing the real backend.
+> This document describes the implemented API for library-api v1.0.0 — the backend service for the `library-portal` Vue 3 frontend.
 
 ---
 
@@ -103,7 +102,7 @@ Invalidates the bearer token that was used to make the request, so it can no lon
 
 - **Endpoint**: `POST /auth/logout`
 - **Authentication**: Required (`Authorization: Bearer <token>`).
-- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 5), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
+- **Description**: Marks the presented token as revoked. Any subsequent request using that same token must be rejected by the authentication middleware with the standard 401 response (Section 6), even though the token's signature and expiry are still otherwise valid. Logging out does not affect any *other* token the same user may hold (e.g. a session open in a second browser tab).
 
 #### Request Body
 
@@ -171,12 +170,12 @@ None.
 
 | HTTP Status | Description |
 |---|---|
-| 401 Unauthorized | Missing, malformed, expired, or already-revoked token (standard Section 5 response). |
+| 401 Unauthorized | Missing, malformed, expired, or already-revoked token (standard Section 6 response). |
 | 500 Internal Server Error | Generic server error. |
 
 #### Backend Requirements
 
-- The endpoint must be protected by the authentication middleware — a token that has already expired or been revoked must be rejected before refresh logic runs, with the standard 401 (Section 5). There is no "grace period" beyond `exp`.
+- The endpoint must be protected by the authentication middleware — a token that has already expired or been revoked must be rejected before refresh logic runs, with the standard 401 (Section 6). There is no "grace period" beyond `exp`.
 - On success, revoke the incoming token's `jti` (via the same `revokeToken` path used by `POST /auth/logout`) before signing the new one, so concurrent calls with the same old token cannot each produce a valid new token.
 - The new token must be signed with `signToken` (`src/lib/jwt.js`) so it receives a fresh `jti`, the same TTL as a freshly-issued login token, and all claims (`id`, `username`, `role`) copied from the validated incoming token — no database read of the `User` row is needed.
 - The response carries only `token`; the user profile is unchanged and does not need to be re-sent.
@@ -384,7 +383,83 @@ Returns an array of `ChangelogEntry` objects.
 
 ---
 
-## 5. Authentication Middleware
+## 5. Users
+
+### 5.1 Change Password
+
+Updates the password of the currently authenticated user.
+
+- **Endpoint**: `PATCH /users/me/password`
+- **Authentication**: Required (`Authorization: Bearer <token>`).
+- **Description**: Verifies the provided `currentPassword` against the stored hash, then replaces it with a bcrypt hash of `newPassword`. The user's existing token remains valid after the change — this endpoint does not revoke any sessions.
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `currentPassword` | string | Yes | The user's current password (plain text). |
+| `newPassword` | string | Yes | The desired new password (plain text). |
+
+**Example Request:**
+
+```json
+{
+  "currentPassword": "reader",
+  "newPassword": "newSecurePass123"
+}
+```
+
+#### Success Response (HTTP 200)
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | Always `true` on success. |
+
+**Example Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+#### Error Responses
+
+| HTTP Status | `success` | `errorKey` | Description |
+|---|---|---|---|
+| 400 Bad Request | `false` | `users.changePassword.missingFields` | `currentPassword` or `newPassword` is absent from the request body. |
+| 401 Unauthorized | `false` | `users.changePassword.wrongCurrentPassword` | `currentPassword` does not match the stored password. |
+| 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked bearer token. |
+| 500 Internal Server Error | `false` | omitted | Generic server error. |
+
+**Example Error Response (wrong current password):**
+
+```json
+{
+  "success": false,
+  "errorKey": "users.changePassword.wrongCurrentPassword"
+}
+```
+
+**Example Error Response (missing fields):**
+
+```json
+{
+  "success": false,
+  "errorKey": "users.changePassword.missingFields"
+}
+```
+
+#### Backend Requirements
+
+- The endpoint must be protected by the authentication middleware — the user's identity comes from the validated bearer token (`req.user.sub`), not from the request body.
+- `currentPassword` must be verified against the user's stored bcrypt hash before the update is applied; a mismatch returns 401, not 403.
+- `newPassword` must be hashed with bcrypt before storage (same cost factor as `POST /auth/login`).
+- The user's active token is **not** revoked after the change — callers that need immediate session invalidation should also call `POST /auth/logout`.
+
+---
+
+## 6. Authentication Middleware
 
 The backend must inspect the `Authorization` header on every protected route.
 
@@ -402,11 +477,11 @@ The backend must inspect the `Authorization` header on every protected route.
 
 ---
 
-## 6. Data Model Summary
+## 7. Data Model Summary
 
 > **Naming note:** field names below (and throughout this document, and in every JSON request/response) are camelCase — that is the wire format the frontend expects and it does not change. The backend's own SQL tables and columns are named in snake_case internally (e.g. `full_name`, `cover_color`) purely as a storage-layer/SQL convention; this is an implementation detail behind the ORM and has no bearing on the API contract described here.
 
-### 6.1 User (Internal)
+### 7.1 User (Internal)
 
 Used only for authentication. The frontend never sees the `password` field.
 
@@ -418,7 +493,7 @@ Used only for authentication. The frontend never sees the `password` field.
 | `fullName` | string | Display name. |
 | `role` | string | e.g., `reader`, `admin`. |
 
-### 6.2 User (Public Profile)
+### 7.2 User (Public Profile)
 
 Returned by the login endpoint.
 
@@ -429,7 +504,7 @@ Returned by the login endpoint.
 | `fullName` | string |
 | `role` | string |
 
-### 6.3 Book
+### 7.3 Book
 
 | Field | Type | Constraints |
 |---|---|---|
@@ -444,7 +519,7 @@ Returned by the login endpoint.
 | `summary` | string | Required, non-empty. Descriptive blurb. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
 | `pdfUrl` | string \| null | Optional. Embeddable PDF URL. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
 
-### 6.4 Revoked Token (Internal)
+### 7.4 Revoked Token (Internal)
 
 Server-side only — never exposed through any API response. Backs the `POST /auth/logout` endpoint; see `ADR-0002-jwt-logout-invalidation-strategy.md`.
 
@@ -455,7 +530,7 @@ Server-side only — never exposed through any API response. Backs the `POST /au
 | `expiresAt` | datetime | Copied from the token's `exp` claim; used to prune rows once the token would have expired naturally anyway. |
 | `createdAt` | datetime | When the logout happened. |
 
-### 6.5 Changelog Entry
+### 7.5 Changelog Entry
 
 | Field | Type | Constraints |
 |---|---|---|
@@ -467,11 +542,11 @@ Server-side only — never exposed through any API response. Backs the `POST /au
 
 ---
 
-## 7. Seed Data Reference
+## 8. Seed Data Reference
 
 The frontend currently ships with the following mock data. The backend should provide at least this dataset for parity.
 
-### 7.1 Demo User
+### 8.1 Demo User
 
 ```json
 {
@@ -485,7 +560,7 @@ The frontend currently ships with the following mock data. The backend should pr
 
 > Note: Store the password as a hash in the real database; the plaintext value above is only for frontend login testing.
 
-### 7.2 Demo Books
+### 8.2 Demo Books
 
 The mock catalog contains 12 books covering the following genres:
 
@@ -498,13 +573,13 @@ The mock catalog contains 12 books covering the following genres:
 
 Each book has the fields listed in the `Book` data model above, with `status` being either `available` or `borrowed`, and `pdfUrl` set for roughly half the catalog (the rest are `null`).
 
-### 7.3 Demo Changelog
+### 8.3 Demo Changelog
 
 At least the four entries the frontend mock ships with (versions `1.0.0` through `1.3.0`), so the `/changelog` page has representative content. See `prisma/seed.js` for the exact entries.
 
 ---
 
-## 8. CORS and Local Development
+## 9. CORS and Local Development
 
 Because the frontend development server runs on a different port than the backend (usually `http://localhost:5173`), the backend must enable CORS for the frontend origin.
 
@@ -515,22 +590,22 @@ Allowed headers should include:
 
 ---
 
-## 9. Migration Notes from Mock to Real API
+## 10. Migration Notes from Mock to Real API
 
-When the backend is ready, the frontend only needs to change the implementation of these functions in `src/api/books.js` and `src/api/changelog.js`:
+These are the changes the frontend needed when switching from the in-repo mocks to this backend (delivered in v1.0.0).
 
 1. `authenticate({ username, password })` → `POST /auth/login`
 2. `fetchBooks()` → `GET /books`
 3. `fetchBookById(id)` → `GET /books/:id`
 4. `fetchChangelog()` → `GET /changelog`
 
-No changes are required in the views, components, store, or router, as long as the backend matches the schemas and authentication behavior described in this document — **with one exception**: `fetchBookById`'s not-found handling (see Section 3.2) must change from "inspect the body for `null`" to "treat HTTP 404 as not found," since the implemented backend returns 404 with no body instead of the mock's `null` + 200.
+No changes were required in the views, components, store, or router, as long as the backend matches the schemas and authentication behavior described in this document — **with one exception**: `fetchBookById`'s not-found handling (see Section 3.2) must change from "inspect the body for `null`" to "treat HTTP 404 as not found," since the implemented backend returns 404 with no body instead of the mock's `null` + 200.
 
 > **Logout is new.** The mocked frontend never had a logout call to migrate, so wiring up `POST /auth/logout` (Section 2.2) — clearing the stored token from `localStorage` and calling the endpoint — is net-new frontend work, not a swap of an existing mock function.
 
 ---
 
-## 10. Future Endpoints (Not Required for MVP)
+## 11. Future Endpoints (Not yet in v1.0.0)
 
 The following endpoints are not consumed by the current frontend but are natural next steps:
 
@@ -541,21 +616,22 @@ The following endpoints are not consumed by the current frontend but are natural
 | `/books/:id` | `DELETE` | Delete a book (admin role). |
 | `/books/:id/borrow` | `POST` | Mark a book as borrowed (reader). |
 | `/books/:id/return` | `POST` | Mark a book as available (reader). |
-| `/me` | `GET` | Return the current user's profile. |
+| `/users/me` | `GET` | Return the current user's public profile. |
 
 ---
 
-## 11. Quick Checklist for Backend Implementation
+## 12. Quick Checklist for Backend Implementation
 
-- [ ] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
-- [ ] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
-- [ ] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
-- [ ] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
-- [ ] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
-- [ ] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
-- [ ] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
-- [ ] Passwords are stored hashed.
-- [ ] CORS is configured for the frontend origin.
-- [ ] The demo user `reader / reader` exists in the database.
-- [ ] The demo book catalog is seeded.
-- [ ] The demo changelog is seeded.
+- [x] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
+- [x] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
+- [x] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
+- [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
+- [x] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
+- [x] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
+- [x] `PATCH /users/me/password` is protected, verifies `currentPassword`, hashes and stores `newPassword`, and returns `{ success: true }`.
+- [x] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
+- [x] Passwords are stored hashed.
+- [x] CORS is configured for the frontend origin.
+- [x] The demo user `reader / reader` exists in the database.
+- [x] The demo book catalog is seeded.
+- [x] The demo changelog is seeded.
