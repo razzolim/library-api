@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset razzolim:001-create-book-table
+--changeset razzolim:002-create-book-table
 CREATE TABLE "book" (
     "id" SERIAL PRIMARY KEY,
     "title" TEXT NOT NULL,
@@ -13,8 +13,5 @@ CREATE TABLE "book" (
     "summary" TEXT NOT NULL,
     "pdf_url" TEXT
 );
---rollback DROP TABLE "book";
-
---changeset razzolim:002-create-book-isbn-unique-index
 CREATE UNIQUE INDEX "book_isbn_key" ON "book"("isbn");
---rollback DROP INDEX "book_isbn_key";
+--rollback DROP INDEX "book_isbn_key"; DROP TABLE "book";
