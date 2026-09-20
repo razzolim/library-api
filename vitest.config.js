@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     globalSetup: './tests/global-setup.js',
+    exclude: ['.claude/**', 'node_modules/**'],
   },
 });

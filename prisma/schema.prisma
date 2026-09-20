@@ -18,6 +18,7 @@ model User {
   fullName String  @map("full_name")
   role     String  @default("reader")
   isActive Boolean @default(true) @map("is_active")
+  locale   String  @default("en")
 
   @@map("user")
 }

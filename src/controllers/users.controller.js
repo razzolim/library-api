@@ -1,5 +1,30 @@
 import * as usersService from '../services/users.service.js';
 
+export async function getMe(req, res, next) {
+  try {
+    const profile = await usersService.getMe(req.user.sub);
+    return res.status(200).json(profile);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateLocale(req, res, next) {
+  try {
+    const { locale } = req.body ?? {};
+    if (!locale) {
+      return res.status(400).json({ success: false, errorKey: 'me.updateLocale.missingLocale' });
+    }
+    const profile = await usersService.updateLocale(req.user.sub, locale);
+    return res.status(200).json(profile);
+  } catch (err) {
+    if (err.code === 'UNSUPPORTED_LOCALE') {
+      return res.status(400).json({ success: false, errorKey: 'me.updateLocale.unsupportedLocale' });
+    }
+    return next(err);
+  }
+}
+
 export async function createUser(req, res, next) {
   try {
     const { username, password, fullName } = req.body ?? {};

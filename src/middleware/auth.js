@@ -23,6 +23,10 @@ export async function authenticate(req, res, next) {
     return res.status(401).json(UNAUTHORIZED_BODY);
   }
 
+  if (payload.type === 'refresh') {
+    return res.status(401).json(UNAUTHORIZED_BODY);
+  }
+
   try {
     if (await isTokenRevoked(payload.jti)) {
       return res.status(401).json(UNAUTHORIZED_BODY);

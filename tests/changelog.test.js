@@ -39,7 +39,7 @@ beforeAll(async () => {
   const loginRes = await request(app)
     .post('/api/auth/login')
     .send({ username: 'changelog-test-reader', password: 'changelog-pass' });
-  token = loginRes.body.token;
+  token = loginRes.body.accessToken;
 });
 
 afterAll(async () => {
