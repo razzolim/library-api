@@ -19,6 +19,14 @@ const demoUser = {
   role: requireEnv('DEMO_USER_ROLE'),
 };
 
+const adminUser = process.env.ADMIN_USER_USERNAME
+  ? {
+      username: process.env.ADMIN_USER_USERNAME,
+      password: requireEnv('ADMIN_USER_PASSWORD'),
+      fullName: requireEnv('ADMIN_USER_FULL_NAME'),
+    }
+  : null;
+
 const demoBooks = [
   {
     title: 'The Pragmatic Programmer',
@@ -197,6 +205,24 @@ async function main() {
     },
   });
 
+  if (adminUser) {
+    const adminPasswordHash = await bcrypt.hash(adminUser.password, 10);
+    await prisma.user.upsert({
+      where: { username: adminUser.username },
+      update: {
+        password: adminPasswordHash,
+        fullName: adminUser.fullName,
+        role: 'admin',
+      },
+      create: {
+        username: adminUser.username,
+        password: adminPasswordHash,
+        fullName: adminUser.fullName,
+        role: 'admin',
+      },
+    });
+  }
+
   for (const book of demoBooks) {
     await prisma.book.upsert({
       where: { isbn: book.isbn },
@@ -213,7 +239,8 @@ async function main() {
     });
   }
 
-  console.log(`Seeded 1 user, ${demoBooks.length} books, and ${demoChangelog.length} changelog entries.`);
+  const userCount = adminUser ? 2 : 1;
+  console.log(`Seeded ${userCount} user(s), ${demoBooks.length} books, and ${demoChangelog.length} changelog entries.`);
 }
 
 main()
