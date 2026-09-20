@@ -98,6 +98,11 @@ jump belongs in a new ADR, not a silent dependency bump.
   field meant for the detail view only, add it to the Prisma model but leave it out of
   `LIST_FIELDS` rather than defaulting to returning everything everywhere.
 
+## Git workflow
+
+- Always work directly on the branch the user currently has checked out. Do not create worktrees, switch branches, or check out a different branch unless the user explicitly asks for it.
+- Never commit or push changes to origin unless the user explicitly requests it. Make edits to the working tree and let the user decide when to stage, commit, and push.
+
 ## Things to avoid
 
 - Don't add a validation library, alternate ORM, or auth framework "for later" — the current scope
