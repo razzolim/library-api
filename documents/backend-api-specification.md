@@ -186,7 +186,85 @@ None.
 
 ## 3. Books
 
-### 3.1 List All Books
+### 3.1 Create a Book
+
+Creates a new book entry. The `uploadedBy` and `uploadedAt` fields are set automatically from the authenticated user's token — they are not accepted from the request body.
+
+- **Endpoint**: `POST /books`
+- **Authentication**: Required (`Authorization: Bearer <token>`). Admin role required.
+- **Description**: Creates a book record. The `uploadedBy` field is populated with the `username` from the bearer token, and `uploadedAt` is set to the current server time.
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | Yes | Book title. |
+| `author` | string | Yes | Author name(s). |
+| `year` | number | Yes | Year of publication. |
+| `genre` | string | Yes | Genre or category. |
+| `isbn` | string | Yes | ISBN identifier (must be unique). |
+| `coverColor` | string | Yes | Hex color code (e.g., `#4a5568`). |
+| `summary` | string | Yes | Descriptive blurb for the detail view. |
+| `pdfUrl` | string \| null | No | Embeddable PDF URL. `null` when absent. |
+| `status` | string | No | `available` or `borrowed`. Defaults to `available`. |
+
+**Example Request:**
+
+```json
+{
+  "title": "Domain-Driven Design",
+  "author": "Eric Evans",
+  "year": 2003,
+  "genre": "Software Architecture",
+  "isbn": "978-0321125217",
+  "coverColor": "#553c9a",
+  "summary": "Tackling complexity in the heart of software."
+}
+```
+
+#### Success Response (HTTP 201)
+
+Returns the newly created `Book` object with all fields, including `uploadedBy`, `uploadedAt`, `summary`, and `pdfUrl`.
+
+**Example Response:**
+
+```json
+{
+  "id": 13,
+  "title": "Domain-Driven Design",
+  "author": "Eric Evans",
+  "year": 2003,
+  "genre": "Software Architecture",
+  "status": "available",
+  "isbn": "978-0321125217",
+  "coverColor": "#553c9a",
+  "summary": "Tackling complexity in the heart of software.",
+  "pdfUrl": null,
+  "uploadedBy": "lib-admin",
+  "uploadedAt": "2026-09-22T10:00:00.000Z"
+}
+```
+
+#### Error Responses
+
+| HTTP Status | `success` | `errorKey` | Description |
+|---|---|---|---|
+| 400 Bad Request | `false` | `books.create.missingFields` | One or more required fields are absent. |
+| 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked token. |
+| 403 Forbidden | — | — | Authenticated user does not have admin role. |
+| 409 Conflict | `false` | `books.create.isbnConflict` | A book with the given ISBN already exists. |
+| 500 Internal Server Error | — | — | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by `authenticate` + `requireAdmin` middleware.
+- `uploadedBy` must be read from `req.user.username` (set by the auth middleware); it must not be accepted from the request body.
+- `uploadedAt` is set by the database (`DEFAULT NOW()`); the application layer does not supply it.
+- A duplicate `isbn` returns 409 with `books.create.isbnConflict`, not 500.
+
+---
+
+### 3.2 List All Books
 
 Returns the complete catalog of books.
 
@@ -223,8 +301,10 @@ Returns an array of `Book` objects.
 | `status` | string | Current status: `available` or `borrowed`. |
 | `isbn` | string | ISBN identifier. |
 | `coverColor` | string | Hex color code used by the frontend for placeholder styling. |
+| `uploadedBy` | string | Username of the admin who added this book. |
+| `uploadedAt` | string | ISO 8601 datetime when the book was added. |
 
-Note: `summary` (see Section 3.2) is intentionally **not** included here — the list endpoint stays
+Note: `summary` (see Section 3.3) is intentionally **not** included here — the list endpoint stays
 light since the frontend renders it as a catalog grid. Fetch `GET /books/:id` for the full detail
 including `summary`.
 
@@ -261,7 +341,7 @@ including `summary`.
 
 ---
 
-### 3.2 Get Book by ID
+### 3.3 Get Book by ID
 
 Returns a single book record.
 
@@ -516,8 +596,10 @@ Returned by the login endpoint.
 | `status` | string | Enum: `available`, `borrowed`. |
 | `isbn` | string | Required, unique, valid ISBN format. |
 | `coverColor` | string | Hex color code (e.g., `#4a5568`). |
-| `summary` | string | Required, non-empty. Descriptive blurb. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
-| `pdfUrl` | string \| null | Optional. Embeddable PDF URL. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.1). |
+| `summary` | string | Required, non-empty. Descriptive blurb. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.2). |
+| `pdfUrl` | string \| null | Optional. Embeddable PDF URL. Only returned by `GET /books/:id` — omitted from `GET /books` (Section 3.2). |
+| `uploadedBy` | string | Username of the admin who created the entry. Set from the JWT on `POST /books`; never accepted from the request body. |
+| `uploadedAt` | datetime | Server-generated timestamp of when the book was added. |
 
 ### 7.4 Revoked Token (Internal)
 
@@ -599,7 +681,7 @@ These are the changes the frontend needed when switching from the in-repo mocks 
 3. `fetchBookById(id)` → `GET /books/:id`
 4. `fetchChangelog()` → `GET /changelog`
 
-No changes were required in the views, components, store, or router, as long as the backend matches the schemas and authentication behavior described in this document — **with one exception**: `fetchBookById`'s not-found handling (see Section 3.2) must change from "inspect the body for `null`" to "treat HTTP 404 as not found," since the implemented backend returns 404 with no body instead of the mock's `null` + 200.
+No changes were required in the views, components, store, or router, as long as the backend matches the schemas and authentication behavior described in this document — **with one exception**: `fetchBookById`'s not-found handling (see Section 3.3) must change from "inspect the body for `null`" to "treat HTTP 404 as not found," since the implemented backend returns 404 with no body instead of the mock's `null` + 200.
 
 > **Logout is new.** The mocked frontend never had a logout call to migrate, so wiring up `POST /auth/logout` (Section 2.2) — clearing the stored token from `localStorage` and calling the endpoint — is net-new frontend work, not a swap of an existing mock function.
 
@@ -611,7 +693,6 @@ The following endpoints are not consumed by the current frontend but are natural
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/books` | `POST` | Create a new book (admin role). |
 | `/books/:id` | `PUT` | Update a book (admin role). |
 | `/books/:id` | `DELETE` | Delete a book (admin role). |
 | `/books/:id/borrow` | `POST` | Mark a book as borrowed (reader). |
@@ -625,7 +706,8 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
 - [x] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
 - [x] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
-- [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`).
+- [x] `POST /books` is protected (admin only), creates a book, sets `uploadedBy` from the JWT username and `uploadedAt` automatically, and returns 201 with the created record.
+- [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`, but including `uploadedBy`/`uploadedAt`).
 - [x] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
 - [x] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
 - [x] `PATCH /users/me/password` is protected, verifies `currentPassword`, hashes and stores `newPassword`, and returns `{ success: true }`.

@@ -115,6 +115,47 @@ Store the new token in `localStorage` under `library_portal_auth` and use it for
 
 ---
 
+### POST /api/books
+
+Creates a new book entry. `uploadedBy` is set automatically from the bearer token — do not send it in the body.
+
+**Authentication:** required. **Admin role required** (403 otherwise).
+
+**Request body:**
+
+```json
+{
+  "title": "Domain-Driven Design",
+  "author": "Eric Evans",
+  "year": 2003,
+  "genre": "Software Architecture",
+  "isbn": "978-0321125217",
+  "coverColor": "#553c9a",
+  "summary": "Tackling complexity in the heart of software.",
+  "pdfUrl": null
+}
+```
+
+Required fields: `title`, `author`, `year`, `genre`, `isbn`, `coverColor`, `summary`. `pdfUrl` and `status` are optional (`status` defaults to `"available"`).
+
+**Success — 201:** the created book record (all fields including `uploadedBy`, `uploadedAt`, `summary`, `pdfUrl`).
+
+**Error — 400** (missing required field):
+
+```json
+{ "success": false, "errorKey": "books.create.missingFields" }
+```
+
+**Error — 409** (ISBN already in use):
+
+```json
+{ "success": false, "errorKey": "books.create.isbnConflict" }
+```
+
+**Errors:** standard 401, 403.
+
+---
+
 ### GET /api/books
 
 Returns the complete book catalog.
@@ -133,7 +174,9 @@ Returns the complete book catalog.
     "genre": "Software Engineering",
     "status": "available",
     "isbn": "978-0201616224",
-    "coverColor": "#4a5568"
+    "coverColor": "#4a5568",
+    "uploadedBy": "lib-admin",
+    "uploadedAt": "2026-09-22T10:00:00.000Z"
   }
 ]
 ```
@@ -163,7 +206,9 @@ Returns a single book with the full detail fields.
   "isbn": "978-0201616224",
   "coverColor": "#4a5568",
   "summary": "A catalog of practical, tool-agnostic habits...",
-  "pdfUrl": "https://drive.google.com/file/d/..."
+  "pdfUrl": "https://drive.google.com/file/d/...",
+  "uploadedBy": "lib-admin",
+  "uploadedAt": "2026-09-22T10:00:00.000Z"
 }
 ```
 
@@ -255,6 +300,8 @@ All structured error responses carry an `errorKey` for frontend i18n:
 | `errorKey` | Endpoint | Meaning |
 |---|---|---|
 | `login.invalidCredentials` | `POST /auth/login` | Username not found or password mismatch. |
+| `books.create.missingFields` | `POST /books` | One or more required book fields are absent. |
+| `books.create.isbnConflict` | `POST /books` | A book with the given ISBN already exists. |
 | `users.changePassword.missingFields` | `PATCH /users/me/password` | `currentPassword` or `newPassword` is absent. |
 | `users.changePassword.wrongCurrentPassword` | `PATCH /users/me/password` | `currentPassword` does not match the stored hash. |
 
@@ -356,11 +403,11 @@ No database or Docker needed. Dependencies are mocked with `vi.mock`. Unit tests
 - `src/lib/jwt.js` — token signing, verification, missing-secret errors
 - `src/middleware/auth.js` — all auth failure paths + happy path
 - `src/services/auth.service.js` — login logic, token revocation, denylist lookup
-- `src/services/books.service.js` — field selection, non-integer id guard
+- `src/services/books.service.js` — field selection, non-integer id guard, book creation
 - `src/services/changelog.service.js` — ordering
 - `src/services/users.service.js` — password verification, hash update
 - `src/controllers/auth.controller.js` — HTTP response shaping, error forwarding
-- `src/controllers/books.controller.js` — HTTP response shaping, 404 handling
+- `src/controllers/books.controller.js` — HTTP response shaping, 404 handling, create validation and conflict errors
 - `src/controllers/changelog.controller.js` — HTTP response shaping
 - `src/controllers/users.controller.js` — missing-field guard, wrong-password 401, success path
 
@@ -450,4 +497,4 @@ See [`documents/release/v1.0.0.md`](documents/release/v1.0.0.md) for the step-by
 
 ## Future endpoints
 
-Not in v1.0.0. See Section 11 of [`documents/backend-api-specification.md`](documents/backend-api-specification.md) for the planned next steps: book CRUD, borrow/return, and `GET /api/users/me`.
+Not in v1.0.0. See Section 11 of [`documents/backend-api-specification.md`](documents/backend-api-specification.md) for the planned next steps: book update/delete, borrow/return, and `GET /api/users/me`.

@@ -11,6 +11,8 @@ const LIST_FIELDS = {
   status: true,
   isbn: true,
   coverColor: true,
+  uploadedBy: true,
+  uploadedAt: true,
 };
 
 export function listBooks() {
@@ -22,4 +24,21 @@ export function getBookById(id) {
     return null;
   }
   return prisma.book.findUnique({ where: { id } });
+}
+
+export function createBook({ title, author, year, genre, isbn, coverColor, summary, pdfUrl, status, uploadedBy }) {
+  return prisma.book.create({
+    data: {
+      title,
+      author,
+      year,
+      genre,
+      isbn,
+      coverColor,
+      summary,
+      pdfUrl: pdfUrl ?? null,
+      status: status ?? 'available',
+      uploadedBy,
+    },
+  });
 }
