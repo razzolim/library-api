@@ -465,7 +465,83 @@ Returns an array of `ChangelogEntry` objects.
 
 ## 5. Users
 
-### 5.1 Change Password
+### 5.1 Create User
+
+Creates a new user account. The new user is always assigned the `reader` role.
+
+- **Endpoint**: `POST /users`
+- **Authentication**: Required (`Authorization: Bearer <token>`). Admin role required.
+- **Description**: Creates a user record with a bcrypt-hashed password. The caller supplies the username, plain-text password, and full name; the role is fixed to `reader` — admins cannot create other admins through this endpoint.
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `username` | string | Yes | The new user's login name (must be unique). |
+| `password` | string | Yes | Plain-text password; stored as a bcrypt hash. |
+| `fullName` | string | Yes | Display name. |
+
+**Example Request:**
+
+```json
+{
+  "username": "jsmith",
+  "password": "s3cureP@ss",
+  "fullName": "John Smith"
+}
+```
+
+#### Success Response (HTTP 201)
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | Always `true` on success. |
+| `user` | object | Public profile of the created user (see below). |
+
+**Public User Profile (`user`):**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | number | Unique numeric identifier. |
+| `username` | string | User's login name. |
+| `fullName` | string | Display name. |
+| `role` | string | Always `reader` for users created through this endpoint. |
+
+**Example Response:**
+
+```json
+{
+  "success": true,
+  "user": {
+    "id": 5,
+    "username": "jsmith",
+    "fullName": "John Smith",
+    "role": "reader"
+  }
+}
+```
+
+#### Error Responses
+
+| HTTP Status | `success` | `errorKey` | Description |
+|---|---|---|---|
+| 400 Bad Request | `false` | `users.createUser.missingFields` | One or more required fields are absent. |
+| 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked token. |
+| 403 Forbidden | — | — | Authenticated user does not have admin role. |
+| 409 Conflict | `false` | `users.createUser.usernameTaken` | A user with the given username already exists. |
+| 500 Internal Server Error | — | — | Generic server error. |
+
+#### Backend Requirements
+
+- The endpoint must be protected by `authenticate` + `requireAdmin` middleware.
+- `password` must be hashed with bcrypt before storage.
+- `role` is always `reader`; the request body cannot override it.
+- A duplicate `username` returns 409 with `users.createUser.usernameTaken`.
+- Never return the `password` field in the response.
+
+---
+
+### 5.2 Change Password
 
 Updates the password of the currently authenticated user.
 
@@ -710,6 +786,7 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`, but including `uploadedBy`/`uploadedAt`).
 - [x] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
 - [x] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
+- [x] `POST /users` is protected (admin only), creates a user with the `reader` role, hashes the password, and returns 201 with the public profile; duplicate username returns 409.
 - [x] `PATCH /users/me/password` is protected, verifies `currentPassword`, hashes and stores `newPassword`, and returns `{ success: true }`.
 - [x] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
 - [x] Passwords are stored hashed.
