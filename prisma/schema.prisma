@@ -37,7 +37,9 @@ model Book {
   summary    String
   // Embeddable PDF URL, only returned by GET /books/:id — same "heavy detail
   // field" treatment as summary. Nullable: not every book has an online copy.
-  pdfUrl     String? @map("pdf_url")
+  pdfUrl     String?  @map("pdf_url")
+  uploadedBy String   @map("uploaded_by")
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
 
   @@map("book")
 }

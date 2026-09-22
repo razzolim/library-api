@@ -11,7 +11,9 @@ CREATE TABLE "book" (
     "isbn" TEXT NOT NULL,
     "cover_color" TEXT NOT NULL,
     "summary" TEXT NOT NULL,
-    "pdf_url" TEXT
+    "pdf_url" TEXT,
+    "uploaded_by" TEXT NOT NULL,
+    "uploaded_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX "book_isbn_key" ON "book"("isbn");
 --rollback DROP INDEX "book_isbn_key"; DROP TABLE "book";

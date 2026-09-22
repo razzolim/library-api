@@ -5,12 +5,13 @@ vi.mock('../lib/prisma.js', () => ({
     book: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      create: vi.fn(),
     },
   },
 }));
 
 import { prisma } from '../lib/prisma.js';
-import { listBooks, getBookById } from './books.service.js';
+import { listBooks, getBookById, createBook } from './books.service.js';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -26,6 +27,8 @@ describe('listBooks', () => {
     expect(select).not.toHaveProperty('pdfUrl');
     expect(select).toHaveProperty('id', true);
     expect(select).toHaveProperty('title', true);
+    expect(select).toHaveProperty('uploadedBy', true);
+    expect(select).toHaveProperty('uploadedAt', true);
   });
 
   it('returns whatever the database returns', async () => {
@@ -57,5 +60,41 @@ describe('getBookById', () => {
     const book = { id: 1, title: 'Clean Code', summary: '...', pdfUrl: null };
     prisma.book.findUnique.mockResolvedValue(book);
     expect(await getBookById(1)).toBe(book);
+  });
+});
+
+describe('createBook', () => {
+  const INPUT = {
+    title: 'New Book', author: 'Author', year: 2024, genre: 'Fiction',
+    isbn: '978-0000000001', coverColor: '#fff', summary: 'A book.',
+    pdfUrl: null, status: 'available', uploadedBy: 'admin',
+  };
+
+  it('calls prisma.book.create with the provided data', async () => {
+    prisma.book.create.mockResolvedValue({ id: 10, ...INPUT, uploadedAt: new Date() });
+    await createBook(INPUT);
+    expect(prisma.book.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ uploadedBy: 'admin', title: 'New Book' }) })
+    );
+  });
+
+  it('defaults status to available when not provided', async () => {
+    prisma.book.create.mockResolvedValue({});
+    await createBook({ ...INPUT, status: undefined });
+    const { data } = prisma.book.create.mock.calls[0][0];
+    expect(data.status).toBe('available');
+  });
+
+  it('defaults pdfUrl to null when not provided', async () => {
+    prisma.book.create.mockResolvedValue({});
+    await createBook({ ...INPUT, pdfUrl: undefined });
+    const { data } = prisma.book.create.mock.calls[0][0];
+    expect(data.pdfUrl).toBeNull();
+  });
+
+  it('returns the created book record', async () => {
+    const created = { id: 10, ...INPUT, uploadedAt: new Date() };
+    prisma.book.create.mockResolvedValue(created);
+    expect(await createBook(INPUT)).toBe(created);
   });
 });
