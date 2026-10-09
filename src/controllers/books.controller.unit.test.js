@@ -4,6 +4,7 @@ vi.mock('../services/books.service.js', () => ({
   listBooks: vi.fn(),
   getBookById: vi.fn(),
   createBook: vi.fn(),
+  validateNewBook: vi.fn(),
 }));
 
 import * as booksService from '../services/books.service.js';
@@ -17,60 +18,59 @@ function mockRes() {
   return res;
 }
 
-const VALID_BOOK_BODY = {
-  title: 'New Book', author: 'Author', year: 2024, genre: 'Fiction',
-  isbn: '978-0000000001', coverColor: '#fff', summary: 'A book.',
-};
+const VALID_BOOK_BODY = { title: 'New Book', author: 'Author', status: 'available' };
+const ACTOR = { sub: 2, username: 'admin' };
 
-beforeEach(() => vi.clearAllMocks());
+function mockReq(overrides = {}) {
+  return { body: VALID_BOOK_BODY, user: ACTOR, ip: '1.1.1.1', get: vi.fn().mockReturnValue('agent'), ...overrides };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  booksService.validateNewBook.mockReturnValue({ data: { title: 'New Book' } });
+});
 
 describe('createBook controller', () => {
-  it('returns 201 with the created book', async () => {
-    const book = { id: 1, ...VALID_BOOK_BODY, uploadedBy: 'admin', uploadedAt: new Date() };
+  it('returns 201 with { success, book }', async () => {
+    const book = { id: 1, title: 'New Book' };
     booksService.createBook.mockResolvedValue(book);
-    const req = { body: VALID_BOOK_BODY, user: { username: 'admin' } };
     const res = mockRes();
-    await createBook(req, res, vi.fn());
+    await createBook(mockReq(), res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith(book);
+    expect(res.json).toHaveBeenCalledWith({ success: true, book });
   });
 
-  it('passes req.user.username as uploadedBy to the service', async () => {
+  it('passes validated data, the acting user and request context to the service', async () => {
     booksService.createBook.mockResolvedValue({});
-    const req = { body: VALID_BOOK_BODY, user: { username: 'lib-admin' } };
-    await createBook(req, mockRes(), vi.fn());
+    await createBook(mockReq(), mockRes(), vi.fn());
     expect(booksService.createBook).toHaveBeenCalledWith(
-      expect.objectContaining({ uploadedBy: 'lib-admin' })
+      { title: 'New Book' }, ACTOR, { ip: '1.1.1.1', userAgent: 'agent' },
     );
   });
 
-  it('returns 400 when a required field is missing', async () => {
+  it('returns 400 with field details when validation fails', async () => {
+    booksService.validateNewBook.mockReturnValue({ fields: { year: 'out_of_range' } });
     const res = mockRes();
-    await createBook({ body: { title: 'Only title' }, user: { username: 'admin' } }, res, vi.fn());
+    await createBook(mockReq(), res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ success: false, errorKey: 'books.create.missingFields' });
+    expect(res.json).toHaveBeenCalledWith({
+      success: false, errorKey: 'admin.books.invalidFields', fields: { year: 'out_of_range' },
+    });
     expect(booksService.createBook).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when body is absent', async () => {
-    const res = mockRes();
-    await createBook({ user: { username: 'admin' } }, res, vi.fn());
-    expect(res.status).toHaveBeenCalledWith(400);
-  });
-
   it('returns 409 when the service throws a P2002 unique-constraint error', async () => {
-    const uniqueErr = Object.assign(new Error('unique'), { code: 'P2002' });
-    booksService.createBook.mockRejectedValue(uniqueErr);
+    booksService.createBook.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
     const res = mockRes();
-    await createBook({ body: VALID_BOOK_BODY, user: { username: 'admin' } }, res, vi.fn());
+    await createBook(mockReq(), res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(409);
-    expect(res.json).toHaveBeenCalledWith({ success: false, errorKey: 'books.create.isbnConflict' });
+    expect(res.json).toHaveBeenCalledWith({ success: false, errorKey: 'admin.books.duplicateIsbn' });
   });
 
   it('calls next with the error for non-P2002 errors', async () => {
     booksService.createBook.mockRejectedValue(new Error('db'));
     const next = vi.fn();
-    await createBook({ body: VALID_BOOK_BODY, user: { username: 'admin' } }, mockRes(), next);
+    await createBook(mockReq(), mockRes(), next);
     expect(next).toHaveBeenCalledWith(expect.any(Error));
   });
 });

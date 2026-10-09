@@ -137,6 +137,14 @@ describe('refreshAccessToken', () => {
     prisma.revokedToken.upsert.mockResolvedValue({});
     prisma.revokedToken.findUnique.mockResolvedValue(null);
     verifyToken.mockReturnValue(REFRESH_PAYLOAD);
+    prisma.user.findUnique.mockResolvedValue({ isActive: true, sessionsValidAfter: null });
+  });
+
+  it('throws INVALID_REFRESH_TOKEN when the session was invalidated by a password reset', async () => {
+    verifyToken.mockReturnValue({ ...REFRESH_PAYLOAD, iat: 1000 });
+    prisma.user.findUnique.mockResolvedValue({ isActive: true, sessionsValidAfter: new Date(2000_000) });
+    await expect(refreshAccessToken('old-refresh')).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+    expect(prisma.revokedToken.upsert).not.toHaveBeenCalled();
   });
 
   it('revokes the old refresh jti and returns new tokens', async () => {

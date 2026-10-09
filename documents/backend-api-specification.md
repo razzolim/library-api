@@ -188,79 +188,51 @@ None.
 
 ### 3.1 Create a Book
 
-Creates a new book entry. The `uploadedBy` and `uploadedAt` fields are set automatically from the authenticated user's token — they are not accepted from the request body.
+Creates a new book entry. The full contract (field rules, error keys, audit logging) lives in the frontend repo's `documents/backend-spec-admin.md` §3; this section summarizes what is implemented.
 
 - **Endpoint**: `POST /books`
-- **Authentication**: Required (`Authorization: Bearer <token>`). Admin role required.
-- **Description**: Creates a book record. The `uploadedBy` field is populated with the `username` from the bearer token, and `uploadedAt` is set to the current server time.
+- **Authentication**: Required. Admin role required (`403` + `admin.forbidden` otherwise).
 
 #### Request Body
 
-| Field | Type | Required | Description |
+| Field | Type | Required | Rules |
 |---|---|---|---|
-| `title` | string | Yes | Book title. |
-| `author` | string | Yes | Author name(s). |
-| `year` | number | Yes | Year of publication. |
-| `genre` | string | Yes | Genre or category. |
-| `isbn` | string | Yes | ISBN identifier (must be unique). |
-| `coverColor` | string | Yes | Hex color code (e.g., `#4a5568`). |
-| `summary` | string | Yes | Descriptive blurb for the detail view. |
-| `pdfUrl` | string \| null | No | Embeddable PDF URL. `null` when absent. |
-| `status` | string | No | `available` or `borrowed`. Defaults to `available`. |
+| `title` | string | Yes | Trimmed, 1–255 chars. |
+| `author` | string | Yes | Trimmed, 1–255 chars. |
+| `status` | string | Yes | `available` or `borrowed`. |
+| `genre` | string \| null | No | Trimmed, ≤ 100 chars. |
+| `year` | integer \| null | No | `0` ≤ year ≤ current year + 1. |
+| `isbn` | string \| null | No | 10 or 13 digits after removing hyphens (ISBN-10 may end in `X`). Unique ignoring hyphens. |
+| `pdfUrl` | string \| null | No | Absolute `http`/`https` URL, ≤ 2048 chars. |
+| `summary` | string \| null | No | ≤ 2000 chars. |
+| `coverColor` | string \| null | No | `#RRGGBB`. Defaults to `#4a5568`. |
 
-**Example Request:**
-
-```json
-{
-  "title": "Domain-Driven Design",
-  "author": "Eric Evans",
-  "year": 2003,
-  "genre": "Software Architecture",
-  "isbn": "978-0321125217",
-  "coverColor": "#553c9a",
-  "summary": "Tackling complexity in the heart of software."
-}
-```
+`id`, `uploadedBy` and `uploadedAt` are ignored if sent: `uploadedBy` comes from the bearer token's `username`, `uploadedAt` from the database.
 
 #### Success Response (HTTP 201)
 
-Returns the newly created `Book` object with all fields, including `uploadedBy`, `uploadedAt`, `summary`, and `pdfUrl`.
-
-**Example Response:**
-
 ```json
 {
-  "id": 13,
-  "title": "Domain-Driven Design",
-  "author": "Eric Evans",
-  "year": 2003,
-  "genre": "Software Architecture",
-  "status": "available",
-  "isbn": "978-0321125217",
-  "coverColor": "#553c9a",
-  "summary": "Tackling complexity in the heart of software.",
-  "pdfUrl": null,
-  "uploadedBy": "lib-admin",
-  "uploadedAt": "2026-09-22T10:00:00.000Z"
+  "success": true,
+  "book": {
+    "id": 13, "title": "Refactoring", "author": "Martin Fowler", "genre": "Software Engineering",
+    "year": 2018, "status": "available", "isbn": "978-0134757599", "coverColor": "#4a5568",
+    "summary": "Improving the design of existing code.", "pdfUrl": null,
+    "uploadedBy": "lib-admin", "uploadedAt": "2026-10-09T18:30:00.000Z"
+  }
 }
 ```
 
 #### Error Responses
 
-| HTTP Status | `success` | `errorKey` | Description |
-|---|---|---|---|
-| 400 Bad Request | `false` | `books.create.missingFields` | One or more required fields are absent. |
-| 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked token. |
-| 403 Forbidden | — | — | Authenticated user does not have admin role. |
-| 409 Conflict | `false` | `books.create.isbnConflict` | A book with the given ISBN already exists. |
-| 500 Internal Server Error | — | — | Generic server error. |
+| HTTP Status | `errorKey` | Description |
+|---|---|---|
+| 400 | `admin.books.invalidFields` | Validation failed; body includes `fields`, e.g. `{ "year": "out_of_range" }`. |
+| 401 | — | Standard (Section 6). |
+| 403 | `admin.forbidden` | Caller is not an admin. |
+| 409 | `admin.books.duplicateIsbn` | ISBN already exists. |
 
-#### Backend Requirements
-
-- The endpoint must be protected by `authenticate` + `requireAdmin` middleware.
-- `uploadedBy` must be read from `req.user.username` (set by the auth middleware); it must not be accepted from the request body.
-- `uploadedAt` is set by the database (`DEFAULT NOW()`); the application layer does not supply it.
-- A duplicate `isbn` returns 409 with `books.create.isbnConflict`, not 500.
+An audit-log entry (`book.create`) is written in the same transaction as the insert.
 
 ---
 
@@ -508,6 +480,7 @@ Updates the password of the currently authenticated user.
 | HTTP Status | `success` | `errorKey` | Description |
 |---|---|---|---|
 | 400 Bad Request | `false` | `users.changePassword.missingFields` | `currentPassword` or `newPassword` is absent from the request body. |
+| 403 Forbidden | `false` | `users.changePassword.demoUserForbidden` | The caller is the shared demo user (`reader`, or `DEMO_USER_USERNAME`); its password cannot be changed. |
 | 401 Unauthorized | `false` | `users.changePassword.wrongCurrentPassword` | `currentPassword` does not match the stored password. |
 | 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked bearer token. |
 | 500 Internal Server Error | `false` | omitted | Generic server error. |
@@ -536,6 +509,24 @@ Updates the password of the currently authenticated user.
 - `currentPassword` must be verified against the user's stored bcrypt hash before the update is applied; a mismatch returns 401, not 403.
 - `newPassword` must be hashed with bcrypt before storage (same cost factor as `POST /auth/login`).
 - The user's active token is **not** revoked after the change — callers that need immediate session invalidation should also call `POST /auth/logout`.
+
+---
+
+### 5.2 Admin: Reset a User's Password
+
+- **Endpoint**: `PATCH /admin/users/:username/password` (`:username` URL-encoded)
+- **Authentication**: Required. Admin role required. Limited to 20 requests/minute per admin (`429` + `admin.rateLimited`).
+- **Request body**: `{ "newPassword": "<string, ≥ 8 chars>" }`
+- **Success (200)**: `{ "success": true, "username": "reader" }`
+
+| HTTP Status | `errorKey` | Description |
+|---|---|---|
+| 400 | `admin.resetPassword.weakPassword` | `newPassword` missing, not a string, or shorter than 8 characters. |
+| 400 | `admin.resetPassword.useAccountPage` | Admin targeted their own account; use `PATCH /users/me/password`. |
+| 403 | `admin.forbidden` | Caller is not an admin. |
+| 404 | `admin.resetPassword.userNotFound` | No user with that exact username. |
+
+The new password is bcrypt-hashed. The target's existing access and refresh tokens stop working (their `sessionsValidAfter` cutoff is set to now; see the "Admin Area" ADR) and a `user.password.reset` audit entry is written. All `/admin/*` routes return `403` + `{ "success": false, "errorKey": "admin.forbidden" }` for non-admins — never `401`.
 
 ---
 
@@ -706,7 +697,8 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `POST /auth/login` returns `{ success, user, token }` or `{ success, errorKey }`.
 - [x] `POST /auth/logout` is protected, revokes the presented token, and returns `{ success: true }`.
 - [x] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
-- [x] `POST /books` is protected (admin only), creates a book, sets `uploadedBy` from the JWT username and `uploadedAt` automatically, and returns 201 with the created record.
+- [x] `POST /books` is protected (admin only), validates fields (Section 3.1), sets `uploadedBy` from the JWT username and `uploadedAt` automatically, and returns 201 with `{ success, book }`.
+- [x] `PATCH /admin/users/:username/password` is protected (admin only), rate-limited, revokes the target's sessions, and is audit-logged.
 - [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`, but including `uploadedBy`/`uploadedAt`).
 - [x] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
 - [x] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.

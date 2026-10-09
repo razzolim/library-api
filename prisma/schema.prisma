@@ -19,6 +19,9 @@ model User {
   role     String  @default("reader")
   isActive Boolean @default(true) @map("is_active")
   locale   String  @default("en")
+  // Tokens issued at or before this instant are rejected (admin password reset
+  // signs the target out everywhere). Null = no cutoff. See ADR "Admin Area".
+  sessionsValidAfter DateTime? @map("sessions_valid_after")
 
   @@map("user")
 }
@@ -27,14 +30,16 @@ model Book {
   id         Int    @id @default(autoincrement())
   title      String
   author     String
-  year       Int
-  genre      String
+  year       Int?
+  genre      String?
   status     String @default("available")
-  isbn       String @unique
-  coverColor String @map("cover_color")
+  isbn       String?
+  // Hyphen-free copy of isbn, used only for the uniqueness check.
+  isbnNormalized String? @unique @map("isbn_normalized")
+  coverColor String @default("#4a5568") @map("cover_color")
   // Longer blurb, only returned by GET /books/:id — omitted from GET /books
   // to keep the list payload light. See backend-api-specification.md 3.1/3.2.
-  summary    String
+  summary    String?
   // Embeddable PDF URL, only returned by GET /books/:id — same "heavy detail
   // field" treatment as summary. Nullable: not every book has an online copy.
   pdfUrl     String?  @map("pdf_url")
@@ -62,4 +67,20 @@ model RevokedToken {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("revoked_token")
+}
+
+// Record of admin actions. No FK to user on purpose: the trail must outlive
+// the rows it refers to. `metadata` must never hold passwords or tokens.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId Int      @map("actor_user_id")
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  ip          String?
+  userAgent   String?  @map("user_agent")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("audit_log")
 }

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import adminRoutes from './routes/admin.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import booksRoutes from './routes/books.routes.js';
 import changelogRoutes from './routes/changelog.routes.js';
@@ -19,6 +20,7 @@ app.use(
 );
 app.use(express.json());
 
+app.use('/api', adminRoutes);
 app.use('/api', authRoutes);
 app.use('/api', booksRoutes);
 app.use('/api', changelogRoutes);
