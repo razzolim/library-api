@@ -1,9 +1,53 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { recordAudit } from './audit.service.js';
 
-export async function isUserActive(userId) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true } });
-  return user?.isActive ?? false;
+// A session is valid while the account is active and the token was issued after the user's
+// `sessionsValidAfter` cutoff (set when an admin resets their password). JWT `iat` has
+// one-second resolution, so the cutoff is truncated to seconds and compared with `<=`.
+export async function isSessionValid(userId, issuedAt) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, sessionsValidAfter: true },
+  });
+  if (!user?.isActive) {
+    return false;
+  }
+  if (user.sessionsValidAfter && issuedAt <= Math.floor(user.sessionsValidAfter.getTime() / 1000)) {
+    return false;
+  }
+  return true;
+}
+
+export async function resetPasswordAsAdmin(actor, username, newPassword, context = {}) {
+  const target = await prisma.user.findUnique({ where: { username } });
+  if (!target) {
+    const err = new Error('User not found');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+  if (target.id === actor.sub) {
+    const err = new Error('Use the account page to change your own password');
+    err.code = 'USE_ACCOUNT_PAGE';
+    throw err;
+  }
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: target.id },
+      data: { password: hash, sessionsValidAfter: new Date() },
+    });
+    await recordAudit(tx, {
+      actorUserId: actor.sub,
+      action: 'user.password.reset',
+      targetType: 'user',
+      targetId: target.id,
+      ...context,
+    });
+  });
+
+  return { username: target.username };
 }
 
 export async function createUser(username, password, fullName) {

@@ -71,8 +71,17 @@ export async function deactivateUser(req, res, next) {
   }
 }
 
+// The shared demo account must keep its well-known password.
+const DEMO_USERNAME = process.env.DEMO_USER_USERNAME || 'reader';
+
 export async function changePassword(req, res, next) {
   try {
+    if (req.user.username === DEMO_USERNAME) {
+      return res
+        .status(403)
+        .json({ success: false, errorKey: 'users.changePassword.demoUserForbidden' });
+    }
+
     const { currentPassword, newPassword } = req.body ?? {};
 
     if (!currentPassword || !newPassword) {

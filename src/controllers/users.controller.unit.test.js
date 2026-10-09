@@ -131,6 +131,18 @@ describe('deactivateUser controller', () => {
 });
 
 describe('changePassword controller', () => {
+  it('returns 403 for the demo user without touching the service', async () => {
+    const res = mockRes();
+    await changePassword(
+      { body: { currentPassword: 'reader', newPassword: 'whatever-new' }, user: { sub: 9, username: 'reader' } },
+      res,
+      vi.fn(),
+    );
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ success: false, errorKey: 'users.changePassword.demoUserForbidden' });
+    expect(usersService.changePassword).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when currentPassword is missing', async () => {
     const res = mockRes();
     await changePassword({ body: { newPassword: 'new' }, user: { sub: 1 } }, res, vi.fn());

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { isSessionValid } from './users.service.js';
 import { signAccessToken, signRefreshToken, verifyToken, decodeToken } from '../lib/jwt.js';
 
 export async function login(username, password, rememberMe = false) {
@@ -70,6 +71,12 @@ export async function refreshAccessToken(rawRefreshToken) {
 
   if (await isTokenRevoked(payload.jti)) {
     const err = new Error('Refresh token revoked');
+    err.code = 'INVALID_REFRESH_TOKEN';
+    throw err;
+  }
+
+  if (!(await isSessionValid(payload.sub, payload.iat))) {
+    const err = new Error('Session no longer valid');
     err.code = 'INVALID_REFRESH_TOKEN';
     throw err;
   }

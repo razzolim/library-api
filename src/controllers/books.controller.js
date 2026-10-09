@@ -1,6 +1,5 @@
 import * as booksService from '../services/books.service.js';
-
-const REQUIRED_BOOK_FIELDS = ['title', 'author', 'year', 'genre', 'isbn', 'coverColor', 'summary'];
+import { requestContext } from '../lib/requestContext.js';
 
 export async function listBooks(req, res, next) {
   try {
@@ -13,19 +12,15 @@ export async function listBooks(req, res, next) {
 
 export async function createBook(req, res, next) {
   try {
-    const { title, author, year, genre, isbn, coverColor, summary, pdfUrl, status } = req.body ?? {};
-    const missing = REQUIRED_BOOK_FIELDS.some((f) => req.body?.[f] == null || req.body[f] === '');
-    if (missing) {
-      return res.status(400).json({ success: false, errorKey: 'books.create.missingFields' });
+    const { data, fields } = booksService.validateNewBook(req.body);
+    if (fields) {
+      return res.status(400).json({ success: false, errorKey: 'admin.books.invalidFields', fields });
     }
-    const book = await booksService.createBook({
-      title, author, year, genre, isbn, coverColor, summary, pdfUrl, status,
-      uploadedBy: req.user.username,
-    });
-    return res.status(201).json(book);
+    const book = await booksService.createBook(data, req.user, requestContext(req));
+    return res.status(201).json({ success: true, book });
   } catch (err) {
     if (err.code === 'P2002') {
-      return res.status(409).json({ success: false, errorKey: 'books.create.isbnConflict' });
+      return res.status(409).json({ success: false, errorKey: 'admin.books.duplicateIsbn' });
     }
     return next(err);
   }

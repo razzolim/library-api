@@ -143,6 +143,7 @@ describe('POST /api/books', () => {
     coverColor: '#553c9a',
     summary: 'Tackling complexity in the heart of software.',
     pdfUrl: null,
+    status: 'available',
   };
 
   it('rejects requests without a token', async () => {
@@ -165,15 +166,16 @@ describe('POST /api/books', () => {
       .send(NEW_BOOK);
 
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({
+    expect(res.body.success).toBe(true);
+    expect(res.body.book).toMatchObject({
       title: 'Domain-Driven Design',
       author: 'Eric Evans',
       year: 2003,
       isbn: '978-0321125217',
       uploadedBy: 'books-test-admin',
     });
-    expect(res.body.uploadedAt).toBeDefined();
-    expect(res.body.id).toBeDefined();
+    expect(res.body.book.uploadedAt).toBeDefined();
+    expect(res.body.book.id).toBeDefined();
   });
 
   it('returns 400 when a required field is missing', async () => {
@@ -183,7 +185,7 @@ describe('POST /api/books', () => {
       .send({ title: 'Incomplete Book' });
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ success: false, errorKey: 'books.create.missingFields' });
+    expect(res.body).toMatchObject({ success: false, errorKey: 'admin.books.invalidFields' });
   });
 
   it('returns 409 when the ISBN is already in use', async () => {
@@ -193,7 +195,7 @@ describe('POST /api/books', () => {
       .send({ ...NEW_BOOK });
 
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ success: false, errorKey: 'books.create.isbnConflict' });
+    expect(res.body).toMatchObject({ success: false, errorKey: 'admin.books.duplicateIsbn' });
   });
 
   it('the new book appears in GET /api/books after creation', async () => {

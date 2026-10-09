@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../lib/jwt.js', () => ({ verifyToken: vi.fn() }));
 vi.mock('../services/auth.service.js', () => ({ isTokenRevoked: vi.fn() }));
-vi.mock('../services/users.service.js', () => ({ isUserActive: vi.fn() }));
+vi.mock('../services/users.service.js', () => ({ isSessionValid: vi.fn() }));
 
 import { verifyToken } from '../lib/jwt.js';
 import { isTokenRevoked } from '../services/auth.service.js';
-import { isUserActive } from '../services/users.service.js';
+import { isSessionValid } from '../services/users.service.js';
 import { authenticate, requireAdmin } from './auth.js';
 
-const PAYLOAD = { sub: 1, username: 'alice', role: 'reader', jti: 'test-jti' };
+const PAYLOAD = { sub: 1, username: 'alice', role: 'reader', jti: 'test-jti', iat: 1000 };
 
 function mockReq(authHeader) {
   return { headers: authHeader !== undefined ? { authorization: authHeader } : {} };
@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   verifyToken.mockReturnValue(PAYLOAD);
   isTokenRevoked.mockResolvedValue(false);
-  isUserActive.mockResolvedValue(true);
+  isSessionValid.mockResolvedValue(true);
 });
 
 describe('authenticate middleware', () => {
@@ -84,16 +84,21 @@ describe('authenticate middleware', () => {
     expect(verifyToken).toHaveBeenCalledWith('my-token');
   });
 
-  it('returns 401 when the user is inactive', async () => {
-    isUserActive.mockResolvedValue(false);
+  it('passes the user id and token iat to isSessionValid', async () => {
+    await authenticate(mockReq('Bearer valid-token'), mockRes(), vi.fn());
+    expect(isSessionValid).toHaveBeenCalledWith(1, 1000);
+  });
+
+  it('returns 401 when the session is no longer valid', async () => {
+    isSessionValid.mockResolvedValue(false);
     const res = mockRes();
     await authenticate(mockReq('Bearer valid-token'), res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  it('calls next with error when isUserActive rejects', async () => {
+  it('calls next with error when isSessionValid rejects', async () => {
     const dbError = new Error('db down');
-    isUserActive.mockRejectedValue(dbError);
+    isSessionValid.mockRejectedValue(dbError);
     const next = vi.fn();
     await authenticate(mockReq('Bearer valid-token'), mockRes(), next);
     expect(next).toHaveBeenCalledWith(dbError);
@@ -113,6 +118,9 @@ describe('requireAdmin middleware', () => {
     const res = mockRes();
     requireAdmin(req, res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: false, errorKey: 'admin.forbidden' }),
+    );
   });
 
   it('returns 403 when req.user is absent', () => {

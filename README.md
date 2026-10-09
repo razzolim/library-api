@@ -132,29 +132,37 @@ Creates a new book entry. `uploadedBy` is set automatically from the bearer toke
   "isbn": "978-0321125217",
   "coverColor": "#553c9a",
   "summary": "Tackling complexity in the heart of software.",
-  "pdfUrl": null
+  "pdfUrl": null,
+  "status": "available"
 }
 ```
 
-Required fields: `title`, `author`, `year`, `genre`, `isbn`, `coverColor`, `summary`. `pdfUrl` and `status` are optional (`status` defaults to `"available"`).
+Required: `title`, `author`, `status` (`available`/`borrowed`). Everything else is optional (`null` when empty); `coverColor` defaults to `#4a5568`. Full field rules: `documents/backend-api-specification.md` §3.1.
 
-**Success — 201:** the created book record (all fields including `uploadedBy`, `uploadedAt`, `summary`, `pdfUrl`).
+**Success — 201:** `{ "success": true, "book": { ...all fields incl. uploadedBy, uploadedAt } }`.
 
-**Error — 400** (missing required field):
-
-```json
-{ "success": false, "errorKey": "books.create.missingFields" }
-```
-
-**Error — 409** (ISBN already in use):
+**Error — 400** (validation, with per-field codes):
 
 ```json
-{ "success": false, "errorKey": "books.create.isbnConflict" }
+{ "success": false, "errorKey": "admin.books.invalidFields", "fields": { "year": "out_of_range" } }
 ```
 
-**Errors:** standard 401, 403.
+**Error — 409** (ISBN already in use, ignoring hyphens):
+
+```json
+{ "success": false, "errorKey": "admin.books.duplicateIsbn" }
+```
+
+**Errors:** standard 401; 403 `{ "success": false, "errorKey": "admin.forbidden" }`.
 
 ---
+
+### PATCH /api/admin/users/:username/password
+
+Admin-only. Body `{ "newPassword": "<≥ 8 chars>" }` → `200 { "success": true, "username": "..." }`. Signs the target user out everywhere. Errors: 400 `admin.resetPassword.weakPassword` / `admin.resetPassword.useAccountPage`, 403 `admin.forbidden`, 404 `admin.resetPassword.userNotFound`, 429 `admin.rateLimited` (20/min per admin). See `documents/backend-api-specification.md` §5.2.
+
+---
+
 
 ### GET /api/books
 
@@ -300,8 +308,10 @@ All structured error responses carry an `errorKey` for frontend i18n:
 | `errorKey` | Endpoint | Meaning |
 |---|---|---|
 | `login.invalidCredentials` | `POST /auth/login` | Username not found or password mismatch. |
-| `books.create.missingFields` | `POST /books` | One or more required book fields are absent. |
-| `books.create.isbnConflict` | `POST /books` | A book with the given ISBN already exists. |
+| `admin.forbidden` | `/admin/*`, `POST /books` | Caller is not an admin (403). |
+| `admin.books.invalidFields` | `POST /books` | One or more fields fail validation (see `fields`). |
+| `admin.books.duplicateIsbn` | `POST /books` | A book with the given ISBN already exists. |
+| `admin.resetPassword.*` | `PATCH /admin/users/:username/password` | `weakPassword`, `userNotFound`, `useAccountPage`. |
 | `users.changePassword.missingFields` | `PATCH /users/me/password` | `currentPassword` or `newPassword` is absent. |
 | `users.changePassword.wrongCurrentPassword` | `PATCH /users/me/password` | `currentPassword` does not match the stored hash. |
 

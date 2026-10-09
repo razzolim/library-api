@@ -1,15 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const tx = vi.hoisted(() => ({ user: { update: vi.fn() } }));
+
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     user: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
+    $transaction: vi.fn((fn) => fn(tx)),
   },
 }));
+vi.mock('./audit.service.js', () => ({ recordAudit: vi.fn() }));
 vi.mock('bcryptjs', () => ({ default: { compare: vi.fn(), hash: vi.fn() } }));
 
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
-import { changePassword, createUser, deactivateUser, isUserActive } from './users.service.js';
+import { recordAudit } from './audit.service.js';
+import { changePassword, createUser, deactivateUser, isSessionValid, resetPasswordAsAdmin } from './users.service.js';
 
 const DB_USER = {
   id: 1,
@@ -22,20 +27,65 @@ const DB_USER = {
 
 beforeEach(() => vi.clearAllMocks());
 
-describe('isUserActive', () => {
-  it('returns true when user is active', async () => {
-    prisma.user.findUnique.mockResolvedValue({ isActive: true });
-    expect(await isUserActive(1)).toBe(true);
+describe('isSessionValid', () => {
+  it('returns true when user is active and has no cutoff', async () => {
+    prisma.user.findUnique.mockResolvedValue({ isActive: true, sessionsValidAfter: null });
+    expect(await isSessionValid(1, 1000)).toBe(true);
   });
 
   it('returns false when user is inactive', async () => {
-    prisma.user.findUnique.mockResolvedValue({ isActive: false });
-    expect(await isUserActive(1)).toBe(false);
+    prisma.user.findUnique.mockResolvedValue({ isActive: false, sessionsValidAfter: null });
+    expect(await isSessionValid(1, 1000)).toBe(false);
   });
 
   it('returns false when user is not found', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
-    expect(await isUserActive(99)).toBe(false);
+    expect(await isSessionValid(99, 1000)).toBe(false);
+  });
+
+  it('returns false for a token issued at or before the cutoff', async () => {
+    prisma.user.findUnique.mockResolvedValue({ isActive: true, sessionsValidAfter: new Date(1000_500) });
+    expect(await isSessionValid(1, 1000)).toBe(false);
+    expect(await isSessionValid(1, 999)).toBe(false);
+  });
+
+  it('returns true for a token issued after the cutoff', async () => {
+    prisma.user.findUnique.mockResolvedValue({ isActive: true, sessionsValidAfter: new Date(1000_500) });
+    expect(await isSessionValid(1, 1001)).toBe(true);
+  });
+});
+
+describe('resetPasswordAsAdmin', () => {
+  const ACTOR = { sub: 2, username: 'boss' };
+
+  it('throws USER_NOT_FOUND for an unknown username', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    await expect(resetPasswordAsAdmin(ACTOR, 'ghost', 'long-enough')).rejects.toMatchObject({
+      code: 'USER_NOT_FOUND',
+    });
+  });
+
+  it('throws USE_ACCOUNT_PAGE when the admin targets themself', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...DB_USER, id: 2 });
+    await expect(resetPasswordAsAdmin(ACTOR, 'boss', 'long-enough')).rejects.toMatchObject({
+      code: 'USE_ACCOUNT_PAGE',
+    });
+  });
+
+  it('hashes the password, sets the session cutoff and writes an audit entry', async () => {
+    prisma.user.findUnique.mockResolvedValue(DB_USER);
+    bcrypt.hash.mockResolvedValue('new-hash');
+    const result = await resetPasswordAsAdmin(ACTOR, 'alice', 'long-enough', { ip: '1.1.1.1' });
+
+    expect(result).toEqual({ username: 'alice' });
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { password: 'new-hash', sessionsValidAfter: expect.any(Date) },
+    });
+    expect(recordAudit).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ actorUserId: 2, action: 'user.password.reset', targetId: 1, ip: '1.1.1.1' }),
+    );
   });
 });
 

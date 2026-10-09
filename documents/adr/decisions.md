@@ -56,3 +56,18 @@ Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one fi
 **Pre-release rule:** Edit the relevant existing changeset file directly rather than appending a new one. Rebuild both databases from scratch after any schema change (Liquibase checksums applied changesets and refuses to reapply a changed one).
 
 **What was rejected:** Flyway (functionally equivalent — Liquibase was the user's explicit preference), local JVM install (Docker keeps "clone and run" working without a JVM on the host).
+
+---
+
+## Admin Area — Authorization, Session Cutoff, Audit Log
+
+**Decision:** Admin-only routes sit behind `authenticate` + `requireAdmin`; non-admins get `403 { errorKey: 'admin.forbidden' }`, never 401 (the frontend would log them out). The role is read from the signed JWT claim.
+
+Resetting another user's password must sign that user out everywhere, but the `jti` denylist can only target tokens it has seen. Instead `user.sessions_valid_after` is set to now, and `authenticate` (and `/auth/refresh`) reject any token whose `iat` is at or before that instant (compared in whole seconds, since `iat` has one-second resolution). This reuses the per-request user read `authenticate` already does for the `isActive` check, so it adds no query. A new login within the same second as the reset is also rejected.
+
+Every admin action writes a row to `audit_log` inside the same transaction as the change. There is deliberately no FK to `user`, so the trail survives user deletion; `metadata` must never hold passwords or tokens. `/admin/*` is rate limited to 20 requests/minute per admin with a small in-memory limiter (no new dependency; per-process, so replace it with a shared store if the API ever runs as multiple instances).
+
+**Why not `tokenVersion`:** a timestamp needs no claim changes and no token reissue, and an int counter would not tell us *when* sessions were cut off.
+
+**Book fields:** `year`, `genre`, `isbn`, `summary` are nullable (the admin form treats them as optional). ISBN uniqueness is enforced on a hyphen-free `isbn_normalized` column; `isbn` keeps the caller's spelling.
+
