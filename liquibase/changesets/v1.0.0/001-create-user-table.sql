@@ -8,8 +8,7 @@ CREATE TABLE "user" (
     "full_name" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'reader',
     "is_active" BOOLEAN NOT NULL DEFAULT TRUE,
-    "locale" VARCHAR(10) NOT NULL DEFAULT 'en',
-    "sessions_valid_after" TIMESTAMPTZ
+    "locale" VARCHAR(10) NOT NULL DEFAULT 'en'
 );
 CREATE UNIQUE INDEX "user_username_key" ON "user"("username");
 --rollback DROP INDEX "user_username_key"; DROP TABLE "user";

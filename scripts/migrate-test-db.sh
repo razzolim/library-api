@@ -2,9 +2,8 @@
 # Rebuilds the library_test database from the Liquibase changelog. Run before the Vitest suite
 # (see tests/global-setup.js) so every test run starts from a known-empty schema, the same
 # guarantee `prisma db push --force-reset` gave under Prisma Migrate. drop-all + update (rather
-# than update alone) is needed because this project edits its existing changesets in place while
-# pre-release (see CLAUDE.md) instead of layering new ones on top, which Liquibase's checksum
-# tracking would otherwise flag as a conflict.
+# than update alone) keeps the test database disposable and proves the whole changeset chain
+# applies cleanly from empty.
 #
 # Uses --network host so Liquibase can reach the Postgres container via localhost:5432 (the
 # published port from docker-compose.yml) without relying on Docker's compose network DNS,

@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-Decisions made for library-api v1.0.0. Update this file in place for any new decisions until the project has a real deployment history that would make in-place edits unsafe.
+Decisions made for library-api v1.0.0. Update this file in place for any new decisions (the project now has a real deployment history, so already-applied changesets are immutable — see the Liquibase section).
 
 ---
 
@@ -49,11 +49,11 @@ Local dev and CI both use a containerized Postgres (`docker-compose.yml`). The `
 
 ## Liquibase for Schema Migrations
 
-Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests rebuild from empty on every run via `scripts/migrate-test-db.sh` (`drop-all` + `update`) because changesets are amended in place pre-release rather than layered.
+Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests rebuild from empty on every run via `scripts/migrate-test-db.sh` (`drop-all` + `update`) to prove the full changeset chain applies cleanly from empty.
 
 **Prisma's role** is unchanged for everything except migrations: `prisma/schema.prisma` is the source the generated Prisma Client builds from. It must be kept in sync with the Liquibase changesets by hand — both sides change when the schema changes.
 
-**Pre-release rule:** Edit the relevant existing changeset file directly rather than appending a new one. Rebuild both databases from scratch after any schema change (Liquibase checksums applied changesets and refuses to reapply a changed one).
+**Deployed rule:** Applied changesets are immutable. Every schema change is a new numbered changeset (with rollback and any needed backfill); Liquibase checksums applied changesets and will not reapply an edited one. (Superseded the earlier pre-release edit-in-place rule after the admin-area change, 006/007, hit a deployed database.)
 
 **What was rejected:** Flyway (functionally equivalent — Liquibase was the user's explicit preference), local JVM install (Docker keeps "clone and run" working without a JVM on the host).
 
