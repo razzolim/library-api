@@ -72,17 +72,14 @@ jump belongs in a new ADR, not a silent dependency bump.
   Docker generally — there is no local/JVM Liquibase install in this project, see ADR-0004). After
   changing schema, also run `npx prisma generate` so the Prisma Client picks up the corresponding
   `prisma/schema.prisma` edit.
-- **This project has not shipped/deployed yet — there is only one set of changesets**
-  (`liquibase/changesets/00N-*.sql`, one file per table). Until that changes, don't add new
-  changeset files for a schema tweak: edit the relevant existing file directly (and
-  `prisma/schema.prisma` to match), then rebuild both local databases from scratch rather than
-  trying to layer a change on top — Liquibase checksums an already-applied changeset and will
-  refuse to reapply it if its SQL changed. For `library_test`, `scripts/migrate-test-db.sh` (used
-  by `tests/global-setup.js`) already does this (`liquibase drop-all --force && liquibase
-  update`) on every test run. For `library`, run the same two commands by hand against it (or just
-  drop/recreate the `library` database via `psql` and rerun `npm run db:migrate`). Only start
-  appending new changeset files once this has a real deployment history that an edit-in-place
-  would need to rewrite.
+- **This project is deployed — changesets 001–005 are applied in a real database and must never
+  be edited** (Liquibase checksums applied changesets; an edit is either rejected or silently never
+  reaches the deployed schema, which is how `user.sessions_valid_after` went missing in production).
+  Every schema change is a new, numbered file in `liquibase/changesets/v1.0.0/` (e.g.
+  `008-<what-it-does>.sql`) containing `ALTER`/`CREATE` statements, with a `--rollback`, and a
+  backfill when existing rows need values. Update `prisma/schema.prisma` to match. `library_test`
+  is still rebuilt from scratch on every run by `scripts/migrate-test-db.sh`, which also exercises
+  the full changeset chain.
 - `npm run db:studio` — inspect local data via Prisma Studio.
 
 ## Adding endpoints
