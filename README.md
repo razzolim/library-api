@@ -157,6 +157,85 @@ Required: `title`, `author`, `status` (`available`/`borrowed`). Everything else 
 
 ---
 
+### POST /api/books/import
+
+Bulk-creates books from a CSV file. **Admin only.** The import is **all-or-nothing**: if any row is invalid (or any ISBN already exists), nothing is inserted and every offending row is reported.
+
+- **Endpoint**: `POST /api/books/import`
+- **Authentication**: Required. Admin role required (`403` + `admin.forbidden` otherwise).
+- **Rate limit**: 10 requests/minute per admin (`429` + `admin.rateLimited`).
+- **Request**: the CSV document is sent as the **raw request body** with `Content-Type: text/csv` (not `multipart/form-data`, not JSON). Max **1 MB** and **500 data rows**.
+- **Template**: [`documents/templates/books-import-template.csv`](documents/templates/books-import-template.csv)
+
+#### CSV format
+
+UTF-8 (BOM allowed), comma-separated, CRLF or LF line endings, RFC 4180 quoting (wrap a cell in `"` if it contains commas, quotes or line breaks; escape `"` as `""`). The first row is a **header** with exact, case-sensitive column names, in any order. Blank lines are ignored. An empty cell means "not provided".
+
+| Column | Required | Rules (identical to `POST /books`) |
+|---|---|---|
+| `title` | Yes | 1–255 chars. |
+| `author` | Yes | 1–255 chars. |
+| `status` | Yes | `available` or `borrowed`. |
+| `genre` | No | ≤ 100 chars. |
+| `year` | No | Integer, `0` ≤ year ≤ current year + 1. |
+| `isbn` | No | 10 or 13 digits after removing hyphens (ISBN-10 may end in `X`). Must be unique in the file and in the catalog, ignoring hyphens. |
+| `pdfUrl` | No | Absolute `http`/`https` URL, ≤ 2048 chars. |
+| `summary` | No | ≤ 2000 chars. |
+| `coverColor` | No | `#RRGGBB`. Defaults to `#4a5568`. |
+
+Only `title`, `author` and `status` must appear in the header; the optional columns may be omitted entirely. Unknown or duplicated column names are rejected. `uploadedBy` is set from the bearer token and `uploadedAt` by the database.
+
+#### Example request
+
+```bash
+curl -X POST http://localhost:3000/api/books/import \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: text/csv" \
+  --data-binary @documents/templates/books-import-template.csv
+```
+
+From the browser: `fetch('/api/books/import', { method: 'POST', headers: { Authorization: ..., 'Content-Type': 'text/csv' }, body: file })`.
+
+#### Success Response (HTTP 201)
+
+```json
+{ "success": true, "imported": 3 }
+```
+
+#### Error Responses
+
+| HTTP Status | `errorKey` | Description |
+|---|---|---|
+| 400 | `admin.books.import.invalidFile` | Body is empty, has a header but no data rows, or has an unterminated quote. |
+| 400 | `admin.books.import.invalidHeader` | Missing required / unknown / duplicated columns; body includes `missing`, `unknown`, `duplicated` arrays. |
+| 400 | `admin.books.import.tooManyRows` | More than 500 data rows; body includes `maxRows`. |
+| 400 | `admin.books.import.invalidRows` | One or more rows failed validation; body includes `errors`. |
+| 401 | — | Standard (Section 6). |
+| 403 | `admin.forbidden` | Caller is not an admin. |
+| 409 | `admin.books.import.duplicateIsbn` | ISBN(s) already in the catalog; body includes `errors`. |
+| 413 | `admin.books.import.fileTooLarge` | Body exceeds 1 MB; body includes `maxBytes`. |
+| 415 | `admin.books.import.unsupportedMediaType` | `Content-Type` is not `text/csv`. |
+| 429 | `admin.rateLimited` | Rate limit exceeded. |
+
+`errors` is an array of `{ "line": <1-based line in the file>, "fields": { <column>: <code> } }`. Field codes are the same as `POST /books` (`required`, `too_long`, `invalid`, `invalid_type`, `out_of_range`), plus `duplicate_in_file` and `duplicate` (ISBN already in the catalog) for `isbn`, and `{ "row": "column_count_mismatch" }` when a row has a different number of cells than the header.
+
+```json
+{
+  "success": false,
+  "errorKey": "admin.books.import.invalidRows",
+  "errors": [
+    { "line": 3, "fields": { "title": "required" } },
+    { "line": 5, "fields": { "year": "invalid_type", "status": "invalid" } }
+  ]
+}
+```
+
+One audit-log entry (`book.import`, `metadata: { count }`) is written in the same transaction as the inserts.
+
+Full contract: `documents/backend-api-specification.md` §3.4.
+
+---
+
 ### GET / PATCH / DELETE /api/admin/users
 
 Admin-only user management: `GET /admin/users?page=&pageSize=&query=` (paginated, searchable), `PATCH /admin/users/:username` (`{ email }` and/or `{ enabled }`), `DELETE /admin/users/:username`. Contract and error keys: `documents/backend-api-specification.md` §5.3.
@@ -314,9 +393,10 @@ All structured error responses carry an `errorKey` for frontend i18n:
 | `errorKey` | Endpoint | Meaning |
 |---|---|---|
 | `login.invalidCredentials` | `POST /auth/login` | Username not found or password mismatch. |
-| `admin.forbidden` | `/admin/*`, `POST /books` | Caller is not an admin (403). |
+| `admin.forbidden` | `/admin/*`, `POST /books`, `POST /books/import` | Caller is not an admin (403). |
 | `admin.books.invalidFields` | `POST /books` | One or more fields fail validation (see `fields`). |
 | `admin.books.duplicateIsbn` | `POST /books` | A book with the given ISBN already exists. |
+| `admin.books.import.*` | `POST /books/import` | `invalidFile`, `invalidHeader`, `tooManyRows`, `invalidRows`, `duplicateIsbn`, `fileTooLarge`, `unsupportedMediaType`. See spec §3.4. |
 | `admin.users.*` | `/admin/users` | `notFound`, `invalidEmail`, `invalidFields`, `duplicateEmail`, `cannotModifySelf`, `lastAdmin`. See spec §5.3. |
 | `login.accountDisabled` | `POST /auth/login` | Correct credentials but the account is disabled (403). |
 | `admin.resetPassword.*` | `PATCH /admin/users/:username/password` | `weakPassword`, `userNotFound`, `useAccountPage`. |
