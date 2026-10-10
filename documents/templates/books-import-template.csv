@@ -1,0 +1,4 @@
+title,author,status,genre,year,isbn,pdfUrl,summary,coverColor
+Refactoring,Martin Fowler,available,Software Engineering,2018,978-0134757599,https://example.com/refactoring.pdf,Improving the design of existing code.,#2b6cb0
+"Design Patterns: Elements of Reusable Object-Oriented Software","Gamma, Helm, Johnson & Vlissides",available,Software Engineering,1994,978-0201633610,,"A catalog of 23 classic patterns, with ""quotes"" and commas handled by CSV quoting.",
+The Mythical Man-Month,Frederick P. Brooks Jr.,borrowed,Software Engineering,1975,0-201-83595-9,,,#553c9a

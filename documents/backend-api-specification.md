@@ -379,6 +379,83 @@ The mock originally returned `null` with HTTP 200 when the ID was not found. The
 
 ---
 
+### 3.4 Import Books from CSV (Admin)
+
+Bulk-creates books from a CSV file. **Admin only.** The import is **all-or-nothing**: if any row is invalid (or any ISBN already exists), nothing is inserted and every offending row is reported.
+
+- **Endpoint**: `POST /api/books/import`
+- **Authentication**: Required. Admin role required (`403` + `admin.forbidden` otherwise).
+- **Rate limit**: 10 requests/minute per admin (`429` + `admin.rateLimited`).
+- **Request**: the CSV document is sent as the **raw request body** with `Content-Type: text/csv` (not `multipart/form-data`, not JSON). Max **1 MB** and **500 data rows**.
+- **Template**: [`documents/templates/books-import-template.csv`](templates/books-import-template.csv)
+
+#### CSV format
+
+UTF-8 (BOM allowed), comma-separated, CRLF or LF line endings, RFC 4180 quoting (wrap a cell in `"` if it contains commas, quotes or line breaks; escape `"` as `""`). The first row is a **header** with exact, case-sensitive column names, in any order. Blank lines are ignored. An empty cell means "not provided".
+
+| Column | Required | Rules (identical to `POST /books`) |
+|---|---|---|
+| `title` | Yes | 1–255 chars. |
+| `author` | Yes | 1–255 chars. |
+| `status` | Yes | `available` or `borrowed`. |
+| `genre` | No | ≤ 100 chars. |
+| `year` | No | Integer, `0` ≤ year ≤ current year + 1. |
+| `isbn` | No | 10 or 13 digits after removing hyphens (ISBN-10 may end in `X`). Must be unique in the file and in the catalog, ignoring hyphens. |
+| `pdfUrl` | No | Absolute `http`/`https` URL, ≤ 2048 chars. |
+| `summary` | No | ≤ 2000 chars. |
+| `coverColor` | No | `#RRGGBB`. Defaults to `#4a5568`. |
+
+Only `title`, `author` and `status` must appear in the header; the optional columns may be omitted entirely. Unknown or duplicated column names are rejected. `uploadedBy` is set from the bearer token and `uploadedAt` by the database.
+
+#### Example request
+
+```bash
+curl -X POST http://localhost:3000/api/books/import \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: text/csv" \
+  --data-binary @documents/templates/books-import-template.csv
+```
+
+From the browser: `fetch('/api/books/import', { method: 'POST', headers: { Authorization: ..., 'Content-Type': 'text/csv' }, body: file })`.
+
+#### Success Response (HTTP 201)
+
+```json
+{ "success": true, "imported": 3 }
+```
+
+#### Error Responses
+
+| HTTP Status | `errorKey` | Description |
+|---|---|---|
+| 400 | `admin.books.import.invalidFile` | Body is empty, has a header but no data rows, or has an unterminated quote. |
+| 400 | `admin.books.import.invalidHeader` | Missing required / unknown / duplicated columns; body includes `missing`, `unknown`, `duplicated` arrays. |
+| 400 | `admin.books.import.tooManyRows` | More than 500 data rows; body includes `maxRows`. |
+| 400 | `admin.books.import.invalidRows` | One or more rows failed validation; body includes `errors`. |
+| 401 | — | Standard (Section 6). |
+| 403 | `admin.forbidden` | Caller is not an admin. |
+| 409 | `admin.books.import.duplicateIsbn` | ISBN(s) already in the catalog; body includes `errors`. |
+| 413 | `admin.books.import.fileTooLarge` | Body exceeds 1 MB; body includes `maxBytes`. |
+| 415 | `admin.books.import.unsupportedMediaType` | `Content-Type` is not `text/csv`. |
+| 429 | `admin.rateLimited` | Rate limit exceeded. |
+
+`errors` is an array of `{ "line": <1-based line in the file>, "fields": { <column>: <code> } }`. Field codes are the same as `POST /books` (`required`, `too_long`, `invalid`, `invalid_type`, `out_of_range`), plus `duplicate_in_file` and `duplicate` (ISBN already in the catalog) for `isbn`, and `{ "row": "column_count_mismatch" }` when a row has a different number of cells than the header.
+
+```json
+{
+  "success": false,
+  "errorKey": "admin.books.import.invalidRows",
+  "errors": [
+    { "line": 3, "fields": { "title": "required" } },
+    { "line": 5, "fields": { "year": "invalid_type", "status": "invalid" } }
+  ]
+}
+```
+
+One audit-log entry (`book.import`, `metadata: { count }`) is written in the same transaction as the inserts.
+
+---
+
 ## 4. Change Log
 
 ### 4.1 List Changelog
@@ -722,6 +799,7 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `POST /auth/refresh` is protected, revokes the old token, issues a new one with a fresh `jti` and `exp`, and returns `{ success: true, token }`.
 - [x] `POST /books` is protected (admin only), validates fields (Section 3.1), sets `uploadedBy` from the JWT username and `uploadedAt` automatically, and returns 201 with `{ success, book }`.
 - [x] `PATCH /admin/users/:username/password` is protected (admin only), rate-limited, revokes the target's sessions, and is audit-logged.
+- [x] `POST /books/import` is protected (admin only), rate-limited, accepts a `text/csv` body (≤ 1 MB, ≤ 500 rows), is all-or-nothing, and is audit-logged (Section 3.4).
 - [x] `GET /books` is protected and returns an array of `Book` objects (without `summary`/`pdfUrl`, but including `uploadedBy`/`uploadedAt`).
 - [x] `GET /books/:id` is protected and returns a `Book` object including `summary` and `pdfUrl`, or HTTP 404 with no body if it doesn't exist.
 - [x] `GET /changelog` is protected and returns an array of `ChangelogEntry` objects, newest first.
