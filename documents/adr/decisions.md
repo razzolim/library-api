@@ -49,7 +49,7 @@ Local dev and CI both use a containerized Postgres (`docker-compose.yml`). The `
 
 ## Liquibase for Schema Migrations
 
-Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests rebuild from empty on every run via `scripts/migrate-test-db.sh` (`drop-all` + `update`) to prove the full changeset chain applies cleanly from empty.
+Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests apply pending changesets to `library_test` via `scripts/migrate-test-db.sh` (`update` only; data is kept between runs). `scripts/ensure-test-db.sh --teardown` (or `npm run test:fresh`) drops the test database first to prove the full changeset chain applies cleanly from empty; CI always starts empty.
 
 **Prisma's role** is unchanged for everything except migrations: `prisma/schema.prisma` is the source the generated Prisma Client builds from. It must be kept in sync with the Liquibase changesets by hand — both sides change when the schema changes.
 
@@ -70,4 +70,6 @@ Every admin action writes a row to `audit_log` inside the same transaction as th
 **Why not `tokenVersion`:** a timestamp needs no claim changes and no token reissue, and an int counter would not tell us *when* sessions were cut off.
 
 **Book fields:** `year`, `genre`, `isbn`, `summary` are nullable (the admin form treats them as optional). ISBN uniqueness is enforced on a hyphen-free `isbn_normalized` column; `isbn` keeps the caller's spelling.
+
+**User deletion and disabling:** "enabled" in the API is the existing `user.is_active` column (no second flag). `DELETE /admin/users/:username` is a **hard delete**: books store `uploaded_by` as a username string and `audit_log` has no FK, so nothing breaks, and the delete audit entry keeps the username. Tokens of a deleted user die because `isSessionValid` fails for a missing row. Soft delete was rejected for now to keep usernames/emails reusable and every query free of a `deleted_at` filter. Disable/delete take a row lock on all enabled admins (`SELECT ... FOR UPDATE`) in the same transaction as the update, so two admins cannot remove each other concurrently. `user.email` is unique case-insensitively through a `LOWER(email)` index that exists only in Liquibase (Prisma cannot model it).
 

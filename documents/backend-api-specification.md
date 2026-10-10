@@ -35,8 +35,8 @@ Exchanges user credentials for an authentication token and a public user profile
 
 ```json
 {
-  "username": "reader",
-  "password": "reader"
+  "username": "demo.user",
+  "password": "demo.user"
 }
 ```
 
@@ -64,7 +64,7 @@ Exchanges user credentials for an authentication token and a public user profile
   "success": true,
   "user": {
     "id": 1,
-    "username": "reader",
+    "username": "demo.user",
     "fullName": "Demo Reader",
     "role": "reader"
   },
@@ -456,7 +456,7 @@ Updates the password of the currently authenticated user.
 
 ```json
 {
-  "currentPassword": "reader",
+  "currentPassword": "oldSecurePass123",
   "newPassword": "newSecurePass123"
 }
 ```
@@ -480,7 +480,7 @@ Updates the password of the currently authenticated user.
 | HTTP Status | `success` | `errorKey` | Description |
 |---|---|---|---|
 | 400 Bad Request | `false` | `users.changePassword.missingFields` | `currentPassword` or `newPassword` is absent from the request body. |
-| 403 Forbidden | `false` | `users.changePassword.demoUserForbidden` | The caller is the shared demo user (`reader`, or `DEMO_USER_USERNAME`); its password cannot be changed. |
+| 403 Forbidden | `false` | `users.changePassword.demoUserForbidden` | The caller is the shared demo user (`demo.user`, or `DEMO_USER_USERNAME`); its password cannot be changed. |
 | 401 Unauthorized | `false` | `users.changePassword.wrongCurrentPassword` | `currentPassword` does not match the stored password. |
 | 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked bearer token. |
 | 500 Internal Server Error | `false` | omitted | Generic server error. |
@@ -517,7 +517,7 @@ Updates the password of the currently authenticated user.
 - **Endpoint**: `PATCH /admin/users/:username/password` (`:username` URL-encoded)
 - **Authentication**: Required. Admin role required. Limited to 20 requests/minute per admin (`429` + `admin.rateLimited`).
 - **Request body**: `{ "newPassword": "<string, ≥ 8 chars>" }`
-- **Success (200)**: `{ "success": true, "username": "reader" }`
+- **Success (200)**: `{ "success": true, "username": "demo.user" }`
 
 | HTTP Status | `errorKey` | Description |
 |---|---|---|
@@ -527,6 +527,29 @@ Updates the password of the currently authenticated user.
 | 404 | `admin.resetPassword.userNotFound` | No user with that exact username. |
 
 The new password is bcrypt-hashed. The target's existing access and refresh tokens stop working (their `sessionsValidAfter` cutoff is set to now; see the "Admin Area" ADR) and a `user.password.reset` audit entry is written. All `/admin/*` routes return `403` + `{ "success": false, "errorKey": "admin.forbidden" }` for non-admins — never `401`.
+
+---
+
+### 5.3 Admin: User Management
+
+Full contract: the frontend repo's `documents/backend-spec-admin-users.md`. All routes require the admin role (`403` + `admin.forbidden` otherwise). Public user shape: `{ id, username, fullName, email, role, enabled }`.
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /admin/users?page=&pageSize=&query=` | `{ items, total, page, pageSize }`. `page` defaults to 1, `pageSize` to 12 (max 100). `query` is a case-insensitive contains match on username, full name or email. Ordered by `LOWER(full_name), id`. A page past the end returns `200` with `items: []`. |
+| `PATCH /admin/users/:username` | Body `{ email }` and/or `{ enabled }` (other keys → 400). Returns `{ success, user }`. |
+| `DELETE /admin/users/:username` | Hard delete. Returns `{ success: true }`. |
+
+| HTTP Status | `errorKey` | When |
+|---|---|---|
+| 400 | `admin.users.invalidFields` | Empty body, wrong types, or unsupported fields. |
+| 400 | `admin.users.invalidEmail` | Email empty, malformed or > 255 chars. |
+| 404 | `admin.users.notFound` | Unknown username. |
+| 409 | `admin.users.duplicateEmail` | Email in use by another user (case-insensitive). |
+| 409 | `admin.users.cannotModifySelf` | Admin tried to disable or delete themself (re-enabling is a no-op). |
+| 409 | `admin.users.lastAdmin` | Would leave no enabled admin. |
+
+Disabling revokes the user's sessions (same `sessionsValidAfter` cutoff as a password reset) and login then returns `403 { errorKey: "login.accountDisabled" }` — checked **after** the password, so wrong credentials still get `401 login.invalidCredentials`. This replaces the old `401 login.accountDeactivated`. `POST /auth/refresh` returns 401 for disabled or deleted users. Mutations are limited to 60/min per admin (password reset: 20/min). Audit actions: `user.email.update`, `user.disable`, `user.enable`, `user.delete`.
 
 ---
 
@@ -624,8 +647,8 @@ The frontend currently ships with the following mock data. The backend should pr
 ```json
 {
   "id": 1,
-  "username": "reader",
-  "password": "reader",
+  "username": "demo.user",
+  "password": "demo.user",
   "fullName": "Demo Reader",
   "role": "reader"
 }
@@ -706,6 +729,6 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
 - [x] Passwords are stored hashed.
 - [x] CORS is configured for the frontend origin.
-- [x] The demo user `reader / reader` exists in the database.
+- [x] The demo user `demo.user / demo.user` exists in the database.
 - [x] The demo book catalog is seeded.
 - [x] The demo changelog is seeded.

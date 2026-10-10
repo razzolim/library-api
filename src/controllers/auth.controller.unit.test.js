@@ -79,16 +79,16 @@ describe('login controller', () => {
     expect(authService.login).toHaveBeenCalledWith('alice', 'pass', true);
   });
 
-  it('returns 401 with accountDeactivated errorKey when service throws ACCOUNT_DEACTIVATED', async () => {
-    const err = new Error('Account is deactivated');
-    err.code = 'ACCOUNT_DEACTIVATED';
+  it('returns 403 with accountDisabled errorKey when service throws ACCOUNT_DISABLED', async () => {
+    const err = new Error('Account is disabled');
+    err.code = 'ACCOUNT_DISABLED';
     authService.login.mockRejectedValue(err);
     const res = mockRes();
     await login({ body: { username: 'alice', password: 'pass' } }, res, vi.fn());
-    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
       success: false,
-      errorKey: 'login.accountDeactivated',
+      errorKey: 'login.accountDisabled',
     });
   });
 

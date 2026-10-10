@@ -9,15 +9,16 @@ export async function login(username, password, rememberMe = false) {
     return null;
   }
 
-  if (!user.isActive) {
-    const err = new Error('Account is deactivated');
-    err.code = 'ACCOUNT_DEACTIVATED';
-    throw err;
-  }
-
   const passwordMatches = await bcrypt.compare(password, user.password);
   if (!passwordMatches) {
     return null;
+  }
+
+  // Checked after the password so a disabled account is not revealed to someone without it.
+  if (!user.isActive) {
+    const err = new Error('Account is disabled');
+    err.code = 'ACCOUNT_DISABLED';
+    throw err;
   }
 
   const claims = { sub: user.id, username: user.username, role: user.role };

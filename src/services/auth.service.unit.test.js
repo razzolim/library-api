@@ -47,10 +47,16 @@ describe('login', () => {
     expect(await login('alice', 'wrong')).toBeNull();
   });
 
-  it('throws ACCOUNT_DEACTIVATED when the user is inactive', async () => {
+  it('throws ACCOUNT_DISABLED when the password is right but the user is inactive', async () => {
     prisma.user.findUnique.mockResolvedValue({ ...DB_USER, isActive: false });
-    await expect(login('alice', 'correct')).rejects.toMatchObject({ code: 'ACCOUNT_DEACTIVATED' });
-    expect(bcrypt.compare).not.toHaveBeenCalled();
+    bcrypt.compare.mockResolvedValue(true);
+    await expect(login('alice', 'correct')).rejects.toMatchObject({ code: 'ACCOUNT_DISABLED' });
+  });
+
+  it('returns null (not ACCOUNT_DISABLED) when an inactive user gives the wrong password', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...DB_USER, isActive: false });
+    bcrypt.compare.mockResolvedValue(false);
+    expect(await login('alice', 'wrong')).toBeNull();
   });
 
   it('returns accessToken, refreshToken and public profile on success', async () => {

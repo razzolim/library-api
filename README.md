@@ -43,8 +43,8 @@ Exchanges credentials for a bearer token and the user's public profile.
 
 ```json
 {
-  "username": "reader",
-  "password": "reader"
+  "username": "demo.user",
+  "password": "demo.user"
 }
 ```
 
@@ -55,7 +55,7 @@ Exchanges credentials for a bearer token and the user's public profile.
   "success": true,
   "user": {
     "id": 1,
-    "username": "reader",
+    "username": "demo.user",
     "fullName": "Demo Reader",
     "role": "reader"
   },
@@ -154,6 +154,12 @@ Required: `title`, `author`, `status` (`available`/`borrowed`). Everything else 
 ```
 
 **Errors:** standard 401; 403 `{ "success": false, "errorKey": "admin.forbidden" }`.
+
+---
+
+### GET / PATCH / DELETE /api/admin/users
+
+Admin-only user management: `GET /admin/users?page=&pageSize=&query=` (paginated, searchable), `PATCH /admin/users/:username` (`{ email }` and/or `{ enabled }`), `DELETE /admin/users/:username`. Contract and error keys: `documents/backend-api-specification.md` §5.3.
 
 ---
 
@@ -264,7 +270,7 @@ Changes the authenticated user's own password.
 
 ```json
 {
-  "currentPassword": "reader",
+  "currentPassword": "oldSecurePass123",
   "newPassword": "newSecurePass123"
 }
 ```
@@ -311,6 +317,8 @@ All structured error responses carry an `errorKey` for frontend i18n:
 | `admin.forbidden` | `/admin/*`, `POST /books` | Caller is not an admin (403). |
 | `admin.books.invalidFields` | `POST /books` | One or more fields fail validation (see `fields`). |
 | `admin.books.duplicateIsbn` | `POST /books` | A book with the given ISBN already exists. |
+| `admin.users.*` | `/admin/users` | `notFound`, `invalidEmail`, `invalidFields`, `duplicateEmail`, `cannotModifySelf`, `lastAdmin`. See spec §5.3. |
+| `login.accountDisabled` | `POST /auth/login` | Correct credentials but the account is disabled (403). |
 | `admin.resetPassword.*` | `PATCH /admin/users/:username/password` | `weakPassword`, `userNotFound`, `useAccountPage`. |
 | `users.changePassword.missingFields` | `PATCH /users/me/password` | `currentPassword` or `newPassword` is absent. |
 | `users.changePassword.wrongCurrentPassword` | `PATCH /users/me/password` | `currentPassword` does not match the stored hash. |
@@ -377,8 +385,8 @@ The server listens on `http://localhost:3000`; all routes are mounted under `/ap
 `.env.example` ships with the well-known demo credentials (see API spec Section 8.1):
 
 ```
-username: reader
-password: reader
+username: demo.user
+password: demo.user
 ```
 
 Seeded by `npm run db:seed` / `node prisma/seed.js`, alongside 12 demo books and 4 changelog entries. Seeding is idempotent and safe to re-run.
@@ -400,7 +408,7 @@ docker compose up -d db
 npm test
 ```
 
-Tests run against a disposable `library_test` database. `tests/global-setup.js` rebuilds it from the Liquibase changelog on every run (`liquibase drop-all` + `update`), so each run starts from a clean schema. Nothing is mocked — tests exercise the real Express app and the real database through Prisma.
+Tests run against a disposable `library_test` database. `tests/global-setup.js` applies any pending Liquibase changesets on every run and keeps the data as the last run left it. Use `npm run test:fresh` (or `scripts/ensure-test-db.sh --teardown`) to drop and recreate `library_test` first, so the run starts from an empty schema. Nothing is mocked — tests exercise the real Express app and the real database through Prisma.
 
 ### Unit tests
 
@@ -477,13 +485,14 @@ library-api/
     changelog-master.yaml     # includeAll of changesets/
     changesets/               # one SQL-formatted changeset file per table
   tests/                      # integration tests (real Express app + real database)
-    global-setup.js           # rebuilds the disposable test DB via Liquibase before each run
+    global-setup.js           # applies pending Liquibase changesets to the test DB before each run
     auth.test.js
     books.test.js
     changelog.test.js
     users.test.js
   scripts/
-    migrate-test-db.sh        # drop-all + update against library_test
+    migrate-test-db.sh        # liquibase update against library_test
+    ensure-test-db.sh         # starts the db container / creates library_test; --teardown drops it first
   documents/
     backend-api-specification.md   # full API contract (schemas, data model, error keys)
     adr/decisions.md               # architecture decisions and rejected alternatives

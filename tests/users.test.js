@@ -202,27 +202,36 @@ describe('PATCH /api/users/:id/deactivate', () => {
     await prisma.user.update({ where: { id: pwReader.id }, data: { isActive: true } });
   });
 
-  it('deactivated user login returns accountDeactivated error', async () => {
+  it('disabled user login returns 403 accountDisabled (after the password check)', async () => {
     const loginRes = await request(app)
       .post('/api/auth/login')
       .send({ username: 'deactivated-user', password: 'deact-pass' });
-    expect(loginRes.status).toBe(401);
-    expect(loginRes.body).toEqual({ success: false, errorKey: 'login.accountDeactivated' });
+    expect(loginRes.status).toBe(403);
+    expect(loginRes.body).toEqual({ success: false, errorKey: 'login.accountDisabled' });
+
+    const wrongPw = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'deactivated-user', password: 'wrong' });
+    expect(wrongPw.status).toBe(401);
+    expect(wrongPw.body.errorKey).toBe('login.invalidCredentials');
   });
 });
 
 describe('PATCH /api/users/me/password', () => {
-  it('returns 403 for the demo user "reader"', async () => {
+  it('returns 403 for the demo user', async () => {
+    // Same lookup as the controller: .env may rename the demo account.
+    const demoUsername = process.env.DEMO_USER_USERNAME || 'demo.user';
+    const password = await bcrypt.hash('demo-pass', 4);
     await prisma.user.upsert({
-      where: { username: 'reader' },
-      update: {},
-      create: { username: 'reader', password: await bcrypt.hash('reader', 4), fullName: 'Demo Reader', role: 'reader' },
+      where: { username: demoUsername },
+      update: { password, isActive: true },
+      create: { username: demoUsername, password, fullName: 'Demo Reader', role: 'reader' },
     });
-    const login = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const login = await request(app).post('/api/auth/login').send({ username: demoUsername, password: 'demo-pass' });
     const res = await request(app)
       .patch('/api/users/me/password')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ currentPassword: 'reader', newPassword: 'new-password' });
+      .send({ currentPassword: 'demo-pass', newPassword: 'new-password' });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ success: false, errorKey: 'users.changePassword.demoUserForbidden' });
   });
