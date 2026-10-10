@@ -9,6 +9,9 @@ const router = Router();
 const resetPasswordLimit = rateLimitPerUser({ max: 20, windowMs: 60_000 });
 const mutationLimit = rateLimitPerUser({ max: 60, windowMs: 60_000 });
 
+// Any signed-in user may read the flags; this must stay registered before the admin-only guard.
+router.get('/admin/feature-flags', authenticate, featureFlagsController.listFlags);
+
 router.use('/admin', authenticate, requireAdmin);
 
 router.get('/admin/users', adminController.listUsers);
@@ -16,7 +19,6 @@ router.patch('/admin/users/:username/password', resetPasswordLimit, adminControl
 router.patch('/admin/users/:username', mutationLimit, adminController.updateUser);
 router.delete('/admin/users/:username', mutationLimit, adminController.deleteUser);
 
-router.get('/admin/feature-flags', featureFlagsController.listFlags);
 router.post('/admin/feature-flags', mutationLimit, featureFlagsController.createFlag);
 router.patch('/admin/feature-flags/:key', mutationLimit, featureFlagsController.updateFlag);
 router.delete('/admin/feature-flags/:key', mutationLimit, featureFlagsController.deleteFlag);

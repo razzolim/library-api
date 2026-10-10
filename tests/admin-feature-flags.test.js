@@ -38,7 +38,6 @@ afterAll(async () => {
 
 describe('authorization', () => {
   it.each([
-    ['get', BASE],
     ['post', BASE],
     ['patch', `${BASE}/x`],
     ['delete', `${BASE}/x`],
@@ -46,6 +45,19 @@ describe('authorization', () => {
     const res = await request(app)[method](path).set(auth(readerToken)).send({});
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ success: false, errorKey: 'admin.forbidden' });
+  });
+});
+
+describe('GET access', () => {
+  it('lets a non-admin list flags', async () => {
+    const res = await request(app).get(BASE).set(auth(readerToken));
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.items)).toBe(true);
+  });
+
+  it('still requires a valid token', async () => {
+    const res = await request(app).get(BASE);
+    expect(res.status).toBe(401);
   });
 });
 
