@@ -6,11 +6,11 @@ import { prisma } from '../src/lib/prisma.js';
 
 beforeAll(async () => {
   // Test files run in parallel against one database, so only touch this file's own user.
-  const password = await bcrypt.hash('reader', 10);
+  const password = await bcrypt.hash('demo.user', 10);
   await prisma.user.upsert({
-    where: { username: 'reader' },
-    update: { password, isActive: true, role: 'reader' },
-    create: { username: 'reader', password, fullName: 'Demo Reader', role: 'reader' },
+    where: { username: 'demo.user' },
+    update: { password, isActive: true, role: 'demo.user' },
+    create: { username: 'demo.user', password, fullName: 'Demo Reader', role: 'demo.user' },
   });
 });
 
@@ -20,7 +20,7 @@ afterAll(async () => {
 
 describe('POST /api/auth/login', () => {
   it('returns tokens and public profile for valid credentials', async () => {
-    const res = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const res = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -29,23 +29,23 @@ describe('POST /api/auth/login', () => {
     expect(res.body.expiresIn).toEqual(expect.any(Number));
     expect(res.body.user).toEqual({
       id: expect.any(Number),
-      username: 'reader',
+      username: 'demo.user',
       fullName: 'Demo Reader',
-      role: 'reader',
+      role: 'demo.user',
       locale: expect.any(String),
     });
     expect(res.body.user.password).toBeUndefined();
   });
 
   it('rejects an unknown username', async () => {
-    const res = await request(app).post('/api/auth/login').send({ username: 'nobody', password: 'reader' });
+    const res = await request(app).post('/api/auth/login').send({ username: 'nobody', password: 'demo.user' });
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ success: false, errorKey: 'login.invalidCredentials' });
   });
 
   it('rejects a wrong password', async () => {
-    const res = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'wrong' });
+    const res = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'wrong' });
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ success: false, errorKey: 'login.invalidCredentials' });
@@ -61,7 +61,7 @@ describe('POST /api/auth/login', () => {
   it('accepts rememberMe flag without error', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'reader', password: 'reader', rememberMe: true });
+      .send({ username: 'demo.user', password: 'demo.user', rememberMe: true });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('invalidates the access token used to log out', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { accessToken } = loginRes.body;
 
     const logoutRes = await request(app)
@@ -88,7 +88,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('also revokes the refresh token when passed in the body', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { accessToken, refreshToken } = loginRes.body;
 
     await request(app)
@@ -103,8 +103,8 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('does not affect other valid access tokens', async () => {
-    const firstLogin = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
-    const secondLogin = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const firstLogin = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
+    const secondLogin = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
 
     await request(app)
       .post('/api/auth/logout')
@@ -117,7 +117,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('is safe to call twice with the same access token (second call returns 401)', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { accessToken } = loginRes.body;
 
     await request(app).post('/api/auth/logout').set('Authorization', `Bearer ${accessToken}`);
@@ -129,7 +129,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('rejects a refresh token used as a bearer token', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { refreshToken } = loginRes.body;
 
     const res = await request(app)
@@ -151,7 +151,7 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('returns 200 with a new accessToken and refreshToken', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { refreshToken } = loginRes.body;
 
     const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken });
@@ -164,7 +164,7 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('new accessToken is usable on protected routes', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { refreshToken } = loginRes.body;
 
     const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken });
@@ -175,7 +175,7 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('old refreshToken is revoked after a successful refresh (rotation)', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { refreshToken } = loginRes.body;
 
     await request(app).post('/api/auth/refresh').send({ refreshToken });
@@ -185,7 +185,7 @@ describe('POST /api/auth/refresh', () => {
   });
 
   it('rejects an access token used as a refresh token', async () => {
-    const loginRes = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const loginRes = await request(app).post('/api/auth/login').send({ username: 'demo.user', password: 'demo.user' });
     const { accessToken } = loginRes.body;
 
     const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken: accessToken });

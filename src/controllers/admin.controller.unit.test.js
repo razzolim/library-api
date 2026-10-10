@@ -24,7 +24,7 @@ const ACTOR = { sub: 2, username: 'boss' };
 function mockReq(body = { newPassword: 'long-enough' }) {
   return {
     body,
-    params: { username: 'reader' },
+    params: { username: 'demo.user' },
     user: ACTOR,
     ip: '1.1.1.1',
     get: vi.fn().mockReturnValue('agent'),
@@ -35,13 +35,13 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('resetUserPassword controller', () => {
   it('returns 200 with the username and never the password', async () => {
-    usersService.resetPasswordAsAdmin.mockResolvedValue({ username: 'reader' });
+    usersService.resetPasswordAsAdmin.mockResolvedValue({ username: 'demo.user' });
     const res = mockRes();
     await resetUserPassword(mockReq(), res, vi.fn());
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ success: true, username: 'reader' });
+    expect(res.json).toHaveBeenCalledWith({ success: true, username: 'demo.user' });
     expect(usersService.resetPasswordAsAdmin).toHaveBeenCalledWith(
-      ACTOR, 'reader', 'long-enough', { ip: '1.1.1.1', userAgent: 'agent' },
+      ACTOR, 'demo.user', 'long-enough', { ip: '1.1.1.1', userAgent: 'agent' },
     );
   });
 

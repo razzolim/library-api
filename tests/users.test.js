@@ -218,18 +218,20 @@ describe('PATCH /api/users/:id/deactivate', () => {
 });
 
 describe('PATCH /api/users/me/password', () => {
-  it('returns 403 for the demo user "reader"', async () => {
-    const password = await bcrypt.hash('reader', 4);
+  it('returns 403 for the demo user', async () => {
+    // Same lookup as the controller: .env may rename the demo account.
+    const demoUsername = process.env.DEMO_USER_USERNAME || 'demo.user';
+    const password = await bcrypt.hash('demo-pass', 4);
     await prisma.user.upsert({
-      where: { username: 'reader' },
+      where: { username: demoUsername },
       update: { password, isActive: true },
-      create: { username: 'reader', password, fullName: 'Demo Reader', role: 'reader' },
+      create: { username: demoUsername, password, fullName: 'Demo Reader', role: 'reader' },
     });
-    const login = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
+    const login = await request(app).post('/api/auth/login').send({ username: demoUsername, password: 'demo-pass' });
     const res = await request(app)
       .patch('/api/users/me/password')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
-      .send({ currentPassword: 'reader', newPassword: 'new-password' });
+      .send({ currentPassword: 'demo-pass', newPassword: 'new-password' });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ success: false, errorKey: 'users.changePassword.demoUserForbidden' });
   });

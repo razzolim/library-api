@@ -134,7 +134,7 @@ describe('changePassword controller', () => {
   it('returns 403 for the demo user without touching the service', async () => {
     const res = mockRes();
     await changePassword(
-      { body: { currentPassword: 'reader', newPassword: 'whatever-new' }, user: { sub: 9, username: 'reader' } },
+      { body: { currentPassword: 'demo.user', newPassword: 'whatever-new' }, user: { sub: 9, username: 'demo.user' } },
       res,
       vi.fn(),
     );

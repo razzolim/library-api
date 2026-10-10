@@ -44,8 +44,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before running docker compose}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
-      DEMO_USER_USERNAME: ${DEMO_USER_USERNAME:-reader}
-      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-reader}
+      DEMO_USER_USERNAME: ${DEMO_USER_USERNAME:-demo.user}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-demo.user}
       DEMO_USER_FULL_NAME: ${DEMO_USER_FULL_NAME:-Demo Reader}
       DEMO_USER_ROLE: ${DEMO_USER_ROLE:-reader}
 

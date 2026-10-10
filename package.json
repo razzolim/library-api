@@ -10,8 +10,11 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "pretest": "sh scripts/ensure-test-db.sh",
     "test": "DATABASE_URL=\"postgresql://library:library@localhost:5432/library_test\" JWT_SECRET=\"test-secret\" vitest --run tests/",
+    "pretest:integration": "sh scripts/ensure-test-db.sh",
     "test:integration": "DATABASE_URL=\"postgresql://library:library@localhost:5432/library_test\" JWT_SECRET=\"test-secret\" vitest --run tests/",
+    "test:fresh": "TEARDOWN_TEST_DB=true npm test",
     "test:unit": "JWT_SECRET=\"test-secret\" vitest --run src/ --config vitest.unit.config.js",
     "db:migrate": "docker compose run --rm liquibase update",
     "db:seed": "node prisma/seed.js",

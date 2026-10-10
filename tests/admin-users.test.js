@@ -57,7 +57,7 @@ describe('authorization', () => {
 
 describe('GET /api/admin/users', () => {
   it('returns the public shape, ordered by LOWER(fullName), with pagination metadata', async () => {
-    const res = await request(app).get('/api/admin/users?query=%20Au&pageSize=2').set(auth(adminToken));
+    const res = await request(app).get('/api/admin/users?query=%20%40AU.test%20&pageSize=2').set(auth(adminToken));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ total: 2, page: 1, pageSize: 2 });
     expect(res.body.items.map((u) => u.username)).toEqual(['au-alice', 'au-bob']);

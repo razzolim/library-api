@@ -18,8 +18,8 @@ ENV PORT=3000
 # Non-secret defaults for the seeded demo account (see documents/backend-api-specification.md
 # Section 6.1) — override with `-e` for a different demo account. DATABASE_URL and JWT_SECRET have
 # no defaults here on purpose: they must always be supplied explicitly (see docker-compose.yml).
-ENV DEMO_USER_USERNAME="reader"
-ENV DEMO_USER_PASSWORD="reader"
+ENV DEMO_USER_USERNAME="demo.user"
+ENV DEMO_USER_PASSWORD="demo.user"
 ENV DEMO_USER_FULL_NAME="Demo Reader"
 ENV DEMO_USER_ROLE="reader"
 

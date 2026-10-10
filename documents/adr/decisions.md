@@ -49,7 +49,7 @@ Local dev and CI both use a containerized Postgres (`docker-compose.yml`). The `
 
 ## Liquibase for Schema Migrations
 
-Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests rebuild from empty on every run via `scripts/migrate-test-db.sh` (`drop-all` + `update`) to prove the full changeset chain applies cleanly from empty.
+Migrations live in `liquibase/changesets/*.sql` (SQL formatted changelog, one file per table) wired together by `liquibase/changelog-master.yaml`. Liquibase runs via Docker — `npm run db:migrate` wraps `docker compose run --rm liquibase update`. Tests apply pending changesets to `library_test` via `scripts/migrate-test-db.sh` (`update` only; data is kept between runs). `scripts/ensure-test-db.sh --teardown` (or `npm run test:fresh`) drops the test database first to prove the full changeset chain applies cleanly from empty; CI always starts empty.
 
 **Prisma's role** is unchanged for everything except migrations: `prisma/schema.prisma` is the source the generated Prisma Client builds from. It must be kept in sync with the Liquibase changesets by hand — both sides change when the schema changes.
 

@@ -41,7 +41,7 @@ jump belongs in a new ADR, not a silent dependency bump.
 - Never hardcode credentials in source, including seed/demo data — `prisma/seed.js` sources the
   demo user from `DEMO_USER_USERNAME` / `DEMO_USER_PASSWORD` / `DEMO_USER_FULL_NAME` /
   `DEMO_USER_ROLE` (via `requireEnv`, no in-code fallback) rather than a literal object. `.env` /
-  `.env.example` hold the values (the Dockerfile also bakes in the same non-secret `reader`/`reader`
+  `.env.example` hold the values (the Dockerfile also bakes in the same non-secret `demo.user`/`demo.user`
   defaults as `ENV` so the image seeds out of the box). If you add more seed data with a
   credential-shaped field, follow the same pattern instead of writing the value into the script.
 - Match the response shapes in `documents/backend-api-specification.md` exactly, including
@@ -63,7 +63,7 @@ jump belongs in a new ADR, not a silent dependency bump.
 
 - `npm run dev` — start with file-watch reload.
 - `npm test` — run the Vitest suite against a disposable `library_test` PostgreSQL database
-  (requires `docker compose up -d db`; see `docker-compose.yml` / `docker/init-test-db.sh`),
+  (the `pretest` hook runs `scripts/ensure-test-db.sh`, which starts the `db` container and creates `library_test` if needed, and skips itself when `CI` is set; see `docker-compose.yml` / `docker/init-test-db.sh`),
   reset fresh on every run by `tests/global-setup.js`. Tests hit the real Express app and a real
   database through Prisma; don't add mocking of Prisma or the database into these tests.
 - `npm run db:migrate` — applies the Liquibase changelog (`liquibase/changelog-master.yaml` →
@@ -78,8 +78,9 @@ jump belongs in a new ADR, not a silent dependency bump.
   Every schema change is a new, numbered file in `liquibase/changesets/v1.0.0/` (e.g.
   `008-<what-it-does>.sql`) containing `ALTER`/`CREATE` statements, with a `--rollback`, and a
   backfill when existing rows need values. Update `prisma/schema.prisma` to match. `library_test`
-  is still rebuilt from scratch on every run by `scripts/migrate-test-db.sh`, which also exercises
-  the full changeset chain.
+  keeps its data between runs (`scripts/migrate-test-db.sh` only applies pending changesets); run
+  `npm run test:fresh` (or `scripts/ensure-test-db.sh --teardown`) to drop and rebuild it from scratch,
+  which also exercises the full changeset chain.
 - `npm run db:studio` — inspect local data via Prisma Studio.
 
 ## Adding endpoints

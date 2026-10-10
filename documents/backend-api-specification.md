@@ -35,8 +35,8 @@ Exchanges user credentials for an authentication token and a public user profile
 
 ```json
 {
-  "username": "reader",
-  "password": "reader"
+  "username": "demo.user",
+  "password": "demo.user"
 }
 ```
 
@@ -64,7 +64,7 @@ Exchanges user credentials for an authentication token and a public user profile
   "success": true,
   "user": {
     "id": 1,
-    "username": "reader",
+    "username": "demo.user",
     "fullName": "Demo Reader",
     "role": "reader"
   },
@@ -456,7 +456,7 @@ Updates the password of the currently authenticated user.
 
 ```json
 {
-  "currentPassword": "reader",
+  "currentPassword": "oldSecurePass123",
   "newPassword": "newSecurePass123"
 }
 ```
@@ -480,7 +480,7 @@ Updates the password of the currently authenticated user.
 | HTTP Status | `success` | `errorKey` | Description |
 |---|---|---|---|
 | 400 Bad Request | `false` | `users.changePassword.missingFields` | `currentPassword` or `newPassword` is absent from the request body. |
-| 403 Forbidden | `false` | `users.changePassword.demoUserForbidden` | The caller is the shared demo user (`reader`, or `DEMO_USER_USERNAME`); its password cannot be changed. |
+| 403 Forbidden | `false` | `users.changePassword.demoUserForbidden` | The caller is the shared demo user (`demo.user`, or `DEMO_USER_USERNAME`); its password cannot be changed. |
 | 401 Unauthorized | `false` | `users.changePassword.wrongCurrentPassword` | `currentPassword` does not match the stored password. |
 | 401 Unauthorized | (standard, see Section 6) | — | Missing, invalid, expired, or revoked bearer token. |
 | 500 Internal Server Error | `false` | omitted | Generic server error. |
@@ -517,7 +517,7 @@ Updates the password of the currently authenticated user.
 - **Endpoint**: `PATCH /admin/users/:username/password` (`:username` URL-encoded)
 - **Authentication**: Required. Admin role required. Limited to 20 requests/minute per admin (`429` + `admin.rateLimited`).
 - **Request body**: `{ "newPassword": "<string, ≥ 8 chars>" }`
-- **Success (200)**: `{ "success": true, "username": "reader" }`
+- **Success (200)**: `{ "success": true, "username": "demo.user" }`
 
 | HTTP Status | `errorKey` | Description |
 |---|---|---|
@@ -647,8 +647,8 @@ The frontend currently ships with the following mock data. The backend should pr
 ```json
 {
   "id": 1,
-  "username": "reader",
-  "password": "reader",
+  "username": "demo.user",
+  "password": "demo.user",
   "fullName": "Demo Reader",
   "role": "reader"
 }
@@ -729,6 +729,6 @@ The following endpoints are not consumed by the current frontend but are natural
 - [x] `Authorization: Bearer <token>` is validated on protected routes, including rejecting tokens revoked via logout.
 - [x] Passwords are stored hashed.
 - [x] CORS is configured for the frontend origin.
-- [x] The demo user `reader / reader` exists in the database.
+- [x] The demo user `demo.user / demo.user` exists in the database.
 - [x] The demo book catalog is seeded.
 - [x] The demo changelog is seeded.
