@@ -79,7 +79,7 @@ Every admin action writes a row to `audit_log` inside the same transaction as th
 
 ## Book Reader — PDF Proxy, Progress, Bookmarks, Preferences
 
-**Decision:** Implements `backend-spec-reader.md` (library-portal repo). Changesets 009–012 add `reading_progress` (PK `(user_id, book_id)`), `bookmark` (unique `(user_id, book_id, page)`), `user.reader_preferences` (JSONB) and `book.page_count`; both new tables cascade on user/book deletion. Table names are singular like the rest of the schema (the spec's `bookmarks` was only a suggestion).
+**Decision:** Implements `backend-spec-reader.md` (library-portal repo). Changesets 010–013 add `reading_progress` (PK `(user_id, book_id)`), `bookmark` (unique `(user_id, book_id, page)`), `user.reader_preferences` (JSONB) and `book.page_count`; both new tables cascade on user/book deletion. Table names are singular like the rest of the schema (the spec's `bookmarks` was only a suggestion).
 
 **PDF proxy (`GET /books/:id/pdf`):** the server `fetch`es the book's stored `pdf_url` and pipes the body to the client (no buffering); `Range` is forwarded upstream and 206/416 relayed. Google Drive `/file/d/<id>/…` links are rewritten to the download endpoint. No new dependency: Node 20's built-in `fetch` is enough. The `ETag` is a hash of the stored URL, so `If-None-Match` is answered with 304 without touching storage. An upstream non-200/206 status, a non-PDF content type (e.g. Drive's quota/HTML page) or a network error is a `502 reader.sourceUnavailable` with `Cache-Control: no-store`; upstream text and URLs are never returned or logged. `pdfUrl` still returns the stored Drive link — it switches to the proxy URL when the frontend ships phase B.
 

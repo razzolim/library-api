@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset razzolim:010-create-bookmark-table
+--changeset razzolim:011-create-bookmark-table
 CREATE TABLE "bookmark" (
     "id" SERIAL PRIMARY KEY,
     "user_id" INTEGER NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,

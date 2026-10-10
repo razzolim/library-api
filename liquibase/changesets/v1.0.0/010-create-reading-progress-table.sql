@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset razzolim:009-create-reading-progress-table
+--changeset razzolim:010-create-reading-progress-table
 CREATE TABLE "reading_progress" (
     "user_id" INTEGER NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
     "book_id" INTEGER NOT NULL REFERENCES "book"("id") ON DELETE CASCADE,
