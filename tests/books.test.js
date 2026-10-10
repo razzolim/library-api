@@ -8,7 +8,7 @@ let token;
 let adminToken;
 
 beforeAll(async () => {
-  await prisma.book.deleteMany();
+  await prisma.book.deleteMany({ where: { uploadedBy: 'books-test-admin' } });
   await prisma.user.deleteMany({ where: { username: { in: ['books-test-reader', 'books-test-admin'] } } });
 
   await prisma.book.createMany({
@@ -89,12 +89,14 @@ describe('GET /api/books', () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0]).toMatchObject({ title: 'The Pragmatic Programmer', status: 'available' });
-    expect(res.body[0].summary).toBeUndefined();
-    expect(res.body[0].pdfUrl).toBeUndefined();
-    expect(res.body[0].uploadedBy).toBeDefined();
-    expect(res.body[0].uploadedAt).toBeDefined();
+    // Other test files share the database, so only look at this file's own rows.
+    const mine = res.body.filter((book) => book.uploadedBy === 'books-test-admin');
+    expect(mine).toHaveLength(2);
+    expect(mine[0]).toMatchObject({ title: 'The Pragmatic Programmer', status: 'available' });
+    expect(mine[0].summary).toBeUndefined();
+    expect(mine[0].pdfUrl).toBeUndefined();
+    expect(mine[0].uploadedBy).toBeDefined();
+    expect(mine[0].uploadedAt).toBeDefined();
   });
 });
 

@@ -6,6 +6,7 @@ import * as booksController from '../controllers/books.controller.js';
 
 const router = Router();
 
+const exportLimit = rateLimitPerUser({ max: 10, windowMs: 60_000 });
 const importLimit = rateLimitPerUser({ max: 10, windowMs: 60_000 });
 // The CSV travels as the raw request body (Content-Type: text/csv) — no multipart parser needed.
 const csvBody = express.text({ type: 'text/csv', limit: MAX_IMPORT_BYTES });
@@ -20,6 +21,7 @@ function importBodyErrors(err, req, res, next) {
 
 router.post('/books', authenticate, requireAdmin, booksController.createBook);
 router.post('/books/import', authenticate, requireAdmin, importLimit, csvBody, importBodyErrors, booksController.importBooks);
+router.get('/books/export', authenticate, requireAdmin, exportLimit, booksController.exportBooks);
 router.get('/books', authenticate, booksController.listBooks);
 router.get('/books/:id', authenticate, booksController.getBookById);
 

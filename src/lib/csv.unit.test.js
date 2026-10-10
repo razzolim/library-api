@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv } from './csv.js';
+import { parseCsv, csvCell } from './csv.js';
 
 describe('parseCsv', () => {
   it('parses simple rows with LF and CRLF endings and records start lines', () => {
@@ -25,5 +25,27 @@ describe('parseCsv', () => {
 
   it('throws on an unterminated quote', () => {
     expect(() => parseCsv('a,"b\n')).toThrow('unterminated_quote');
+  });
+});
+
+describe('csvCell', () => {
+  it('leaves simple values and nulls alone', () => {
+    expect(csvCell('abc')).toBe('abc');
+    expect(csvCell(1994)).toBe('1994');
+    expect(csvCell(null)).toBe('');
+  });
+
+  it('quotes commas, quotes and line breaks per RFC 4180', () => {
+    expect(csvCell('a,b')).toBe('"a,b"');
+    expect(csvCell('say "hi"')).toBe('"say ""hi"""');
+    expect(csvCell('a\r\nb')).toBe('"a\r\nb"');
+  });
+
+  it('prefixes formula-looking text but not plain numbers', () => {
+    for (const v of ['=1+1', '+cmd', '-cmd', '@x', '\tx', '\rx']) {
+      expect(csvCell(v, { text: true }).replace(/^"|"$/g, '')).toMatch(/^'/);
+    }
+    expect(csvCell('-5', { text: true })).toBe('-5');
+    expect(csvCell('=1+1')).toBe('=1+1');
   });
 });

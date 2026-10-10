@@ -16,6 +16,7 @@ app.use(
   cors({
     origin: corsOrigin,
     allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Disposition', 'X-Total-Count'],
   }),
 );
 app.use(express.json());
