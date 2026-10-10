@@ -5,8 +5,14 @@ import * as adminController from '../controllers/admin.controller.js';
 
 const router = Router();
 
-router.use('/admin', authenticate, requireAdmin, rateLimitPerUser({ max: 20, windowMs: 60_000 }));
+const resetPasswordLimit = rateLimitPerUser({ max: 20, windowMs: 60_000 });
+const mutationLimit = rateLimitPerUser({ max: 60, windowMs: 60_000 });
 
-router.patch('/admin/users/:username/password', adminController.resetUserPassword);
+router.use('/admin', authenticate, requireAdmin);
+
+router.get('/admin/users', adminController.listUsers);
+router.patch('/admin/users/:username/password', resetPasswordLimit, adminController.resetUserPassword);
+router.patch('/admin/users/:username', mutationLimit, adminController.updateUser);
+router.delete('/admin/users/:username', mutationLimit, adminController.deleteUser);
 
 export default router;

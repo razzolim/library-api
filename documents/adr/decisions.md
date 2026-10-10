@@ -71,3 +71,5 @@ Every admin action writes a row to `audit_log` inside the same transaction as th
 
 **Book fields:** `year`, `genre`, `isbn`, `summary` are nullable (the admin form treats them as optional). ISBN uniqueness is enforced on a hyphen-free `isbn_normalized` column; `isbn` keeps the caller's spelling.
 
+**User deletion and disabling:** "enabled" in the API is the existing `user.is_active` column (no second flag). `DELETE /admin/users/:username` is a **hard delete**: books store `uploaded_by` as a username string and `audit_log` has no FK, so nothing breaks, and the delete audit entry keeps the username. Tokens of a deleted user die because `isSessionValid` fails for a missing row. Soft delete was rejected for now to keep usernames/emails reusable and every query free of a `deleted_at` filter. Disable/delete take a row lock on all enabled admins (`SELECT ... FOR UPDATE`) in the same transaction as the update, so two admins cannot remove each other concurrently. `user.email` is unique case-insensitively through a `LOWER(email)` index that exists only in Liquibase (Prisma cannot model it).
+

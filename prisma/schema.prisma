@@ -18,6 +18,9 @@ model User {
   fullName String  @map("full_name")
   role     String  @default("reader")
   isActive Boolean @default(true) @map("is_active")
+  // Optional. Uniqueness is case-insensitive via a LOWER(email) unique index that
+  // exists only in liquibase/changesets (Prisma cannot model functional indexes).
+  email    String? @db.VarChar(255)
   locale   String  @default("en")
   // Tokens issued at or before this instant are rejected (admin password reset
   // signs the target out everywhere). Null = no cutoff. See ADR "Admin Area".

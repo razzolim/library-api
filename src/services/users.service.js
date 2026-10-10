@@ -43,6 +43,7 @@ export async function resetPasswordAsAdmin(actor, username, newPassword, context
       action: 'user.password.reset',
       targetType: 'user',
       targetId: target.id,
+      metadata: {},
       ...context,
     });
   });

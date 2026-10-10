@@ -530,6 +530,29 @@ The new password is bcrypt-hashed. The target's existing access and refresh toke
 
 ---
 
+### 5.3 Admin: User Management
+
+Full contract: the frontend repo's `documents/backend-spec-admin-users.md`. All routes require the admin role (`403` + `admin.forbidden` otherwise). Public user shape: `{ id, username, fullName, email, role, enabled }`.
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /admin/users?page=&pageSize=&query=` | `{ items, total, page, pageSize }`. `page` defaults to 1, `pageSize` to 12 (max 100). `query` is a case-insensitive contains match on username, full name or email. Ordered by `LOWER(full_name), id`. A page past the end returns `200` with `items: []`. |
+| `PATCH /admin/users/:username` | Body `{ email }` and/or `{ enabled }` (other keys → 400). Returns `{ success, user }`. |
+| `DELETE /admin/users/:username` | Hard delete. Returns `{ success: true }`. |
+
+| HTTP Status | `errorKey` | When |
+|---|---|---|
+| 400 | `admin.users.invalidFields` | Empty body, wrong types, or unsupported fields. |
+| 400 | `admin.users.invalidEmail` | Email empty, malformed or > 255 chars. |
+| 404 | `admin.users.notFound` | Unknown username. |
+| 409 | `admin.users.duplicateEmail` | Email in use by another user (case-insensitive). |
+| 409 | `admin.users.cannotModifySelf` | Admin tried to disable or delete themself (re-enabling is a no-op). |
+| 409 | `admin.users.lastAdmin` | Would leave no enabled admin. |
+
+Disabling revokes the user's sessions (same `sessionsValidAfter` cutoff as a password reset) and login then returns `403 { errorKey: "login.accountDisabled" }` — checked **after** the password, so wrong credentials still get `401 login.invalidCredentials`. This replaces the old `401 login.accountDeactivated`. `POST /auth/refresh` returns 401 for disabled or deleted users. Mutations are limited to 60/min per admin (password reset: 20/min). Audit actions: `user.email.update`, `user.disable`, `user.enable`, `user.delete`.
+
+---
+
 ## 6. Authentication Middleware
 
 The backend must inspect the `Authorization` header on every protected route.

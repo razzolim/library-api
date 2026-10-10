@@ -202,12 +202,18 @@ describe('PATCH /api/users/:id/deactivate', () => {
     await prisma.user.update({ where: { id: pwReader.id }, data: { isActive: true } });
   });
 
-  it('deactivated user login returns accountDeactivated error', async () => {
+  it('disabled user login returns 403 accountDisabled (after the password check)', async () => {
     const loginRes = await request(app)
       .post('/api/auth/login')
       .send({ username: 'deactivated-user', password: 'deact-pass' });
-    expect(loginRes.status).toBe(401);
-    expect(loginRes.body).toEqual({ success: false, errorKey: 'login.accountDeactivated' });
+    expect(loginRes.status).toBe(403);
+    expect(loginRes.body).toEqual({ success: false, errorKey: 'login.accountDisabled' });
+
+    const wrongPw = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'deactivated-user', password: 'wrong' });
+    expect(wrongPw.status).toBe(401);
+    expect(wrongPw.body.errorKey).toBe('login.invalidCredentials');
   });
 });
 

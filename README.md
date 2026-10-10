@@ -157,6 +157,12 @@ Required: `title`, `author`, `status` (`available`/`borrowed`). Everything else 
 
 ---
 
+### GET / PATCH / DELETE /api/admin/users
+
+Admin-only user management: `GET /admin/users?page=&pageSize=&query=` (paginated, searchable), `PATCH /admin/users/:username` (`{ email }` and/or `{ enabled }`), `DELETE /admin/users/:username`. Contract and error keys: `documents/backend-api-specification.md` §5.3.
+
+---
+
 ### PATCH /api/admin/users/:username/password
 
 Admin-only. Body `{ "newPassword": "<≥ 8 chars>" }` → `200 { "success": true, "username": "..." }`. Signs the target user out everywhere. Errors: 400 `admin.resetPassword.weakPassword` / `admin.resetPassword.useAccountPage`, 403 `admin.forbidden`, 404 `admin.resetPassword.userNotFound`, 429 `admin.rateLimited` (20/min per admin). See `documents/backend-api-specification.md` §5.2.
@@ -311,6 +317,8 @@ All structured error responses carry an `errorKey` for frontend i18n:
 | `admin.forbidden` | `/admin/*`, `POST /books` | Caller is not an admin (403). |
 | `admin.books.invalidFields` | `POST /books` | One or more fields fail validation (see `fields`). |
 | `admin.books.duplicateIsbn` | `POST /books` | A book with the given ISBN already exists. |
+| `admin.users.*` | `/admin/users` | `notFound`, `invalidEmail`, `invalidFields`, `duplicateEmail`, `cannotModifySelf`, `lastAdmin`. See spec §5.3. |
+| `login.accountDisabled` | `POST /auth/login` | Correct credentials but the account is disabled (403). |
 | `admin.resetPassword.*` | `PATCH /admin/users/:username/password` | `weakPassword`, `userNotFound`, `useAccountPage`. |
 | `users.changePassword.missingFields` | `PATCH /users/me/password` | `currentPassword` or `newPassword` is absent. |
 | `users.changePassword.wrongCurrentPassword` | `PATCH /users/me/password` | `currentPassword` does not match the stored hash. |
