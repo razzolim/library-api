@@ -128,3 +128,15 @@ model Bookmark {
   @@unique([userId, bookId, page])
   @@map("bookmark")
 }
+
+// Admin-managed on/off switches. `key` is immutable. `updatedBy` is a plain username (no FK)
+// so the flag survives deletion of the admin who last changed it.
+model FeatureFlag {
+  key         String   @id @db.VarChar(64)
+  description String   @default("") @db.VarChar(255)
+  enabled     Boolean  @default(false)
+  updatedAt   DateTime @default(now()) @map("updated_at")
+  updatedBy   String?  @map("updated_by")
+
+  @@map("feature_flag")
+}
