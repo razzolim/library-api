@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
-import { isSessionValid } from './users.service.js';
+import { isSessionValid, resolveReaderPreferences } from './users.service.js';
 import { signAccessToken, signRefreshToken, verifyToken, decodeToken } from '../lib/jwt.js';
 
 export async function login(username, password, rememberMe = false) {
@@ -38,6 +38,7 @@ export async function login(username, password, rememberMe = false) {
       fullName: user.fullName,
       role: user.role,
       locale: user.locale,
+      readerPreferences: resolveReaderPreferences(user.readerPreferences),
     },
   };
 }

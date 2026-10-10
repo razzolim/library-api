@@ -4,6 +4,7 @@ import adminRoutes from './routes/admin.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import booksRoutes from './routes/books.routes.js';
 import changelogRoutes from './routes/changelog.routes.js';
+import readerRoutes from './routes/reader.routes.js';
 import usersRoutes from './routes/users.routes.js';
 
 const app = express();
@@ -15,8 +16,8 @@ const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:5173')
 app.use(
   cors({
     origin: corsOrigin,
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    exposedHeaders: ['Content-Disposition', 'X-Total-Count'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'If-None-Match'],
+    exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'ETag', 'Content-Disposition', 'X-Total-Count'],
   }),
 );
 app.use(express.json());
@@ -25,6 +26,7 @@ app.use('/api', adminRoutes);
 app.use('/api', authRoutes);
 app.use('/api', booksRoutes);
 app.use('/api', changelogRoutes);
+app.use('/api', readerRoutes);
 app.use('/api', usersRoutes);
 
 app.use((req, res) => {

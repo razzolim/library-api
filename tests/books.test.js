@@ -95,6 +95,8 @@ describe('GET /api/books', () => {
     expect(mine[0]).toMatchObject({ title: 'The Pragmatic Programmer', status: 'available' });
     expect(mine[0].summary).toBeUndefined();
     expect(mine[0].pdfUrl).toBeUndefined();
+    expect(mine.map((b) => b.hasPdf)).toEqual([true, false]);
+    expect(mine[0]).toHaveProperty('pageCount', null);
     expect(mine[0].uploadedBy).toBeDefined();
     expect(mine[0].uploadedAt).toBeDefined();
   });
