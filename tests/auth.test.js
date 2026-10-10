@@ -5,14 +5,12 @@ import app from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
 
 beforeAll(async () => {
-  await prisma.user.deleteMany();
-  await prisma.user.create({
-    data: {
-      username: 'reader',
-      password: await bcrypt.hash('reader', 10),
-      fullName: 'Demo Reader',
-      role: 'reader',
-    },
+  // Test files run in parallel against one database, so only touch this file's own user.
+  const password = await bcrypt.hash('reader', 10);
+  await prisma.user.upsert({
+    where: { username: 'reader' },
+    update: { password, isActive: true, role: 'reader' },
+    create: { username: 'reader', password, fullName: 'Demo Reader', role: 'reader' },
   });
 });
 

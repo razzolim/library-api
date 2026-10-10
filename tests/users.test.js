@@ -219,10 +219,11 @@ describe('PATCH /api/users/:id/deactivate', () => {
 
 describe('PATCH /api/users/me/password', () => {
   it('returns 403 for the demo user "reader"', async () => {
+    const password = await bcrypt.hash('reader', 4);
     await prisma.user.upsert({
       where: { username: 'reader' },
-      update: {},
-      create: { username: 'reader', password: await bcrypt.hash('reader', 4), fullName: 'Demo Reader', role: 'reader' },
+      update: { password, isActive: true },
+      create: { username: 'reader', password, fullName: 'Demo Reader', role: 'reader' },
     });
     const login = await request(app).post('/api/auth/login').send({ username: 'reader', password: 'reader' });
     const res = await request(app)
