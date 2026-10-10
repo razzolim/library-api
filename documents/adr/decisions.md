@@ -75,6 +75,8 @@ Every admin action writes a row to `audit_log` inside the same transaction as th
 
 **Bulk book import (CSV):** `POST /books/import` takes the CSV as a raw `text/csv` body (`express.text`, 1 MB cap) instead of `multipart/form-data`, so no upload library (multer/busboy) is added — a new dependency category per CLAUDE.md. The parser is a small RFC 4180 implementation in `src/lib/csv.js`; row validation reuses `validateNewBook`, so import and single-create can't drift. The import is all-or-nothing in one transaction (validation errors are reported per file line) so a partially-applied file never needs manual cleanup, and writes a single `book.import` audit entry rather than one per row. If imports later need larger files, streaming, or a browser `<form>` upload, revisit with multipart support in a new ADR.
 
+**Book export (CSV):** `GET /books/export` streams the whole catalog in the import format (UTF-8 BOM, CRLF, RFC 4180 quoting, text cells starting with `= + - @ TAB CR` prefixed with `'` against spreadsheet formula injection). Rows are read in 500-row id-ordered batches inside one `RepeatableRead` transaction so the file is a single snapshot without holding the catalog in memory; response headers are sent only after the first reads succeed (earlier failures still return a JSON 500, later ones abort the connection). The `book.export` audit entry is written in that same transaction after the last batch, so failed or aborted exports leave no entry. Rate limited to 10/min per admin with the existing in-memory limiter; CORS exposes `Content-Disposition` and `X-Total-Count`.
+
 ---
 
 ## Book Reader — PDF Proxy, Progress, Bookmarks, Preferences

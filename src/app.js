@@ -17,7 +17,7 @@ app.use(
   cors({
     origin: corsOrigin,
     allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'If-None-Match'],
-    exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'ETag'],
+    exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'ETag', 'Content-Disposition', 'X-Total-Count'],
   }),
 );
 app.use(express.json());

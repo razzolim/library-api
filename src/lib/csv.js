@@ -68,3 +68,18 @@ export function parseCsv(text) {
   }
   return records;
 }
+
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/;
+
+// Serializes one cell per RFC 4180 (quote only when needed). `null`/`undefined` become an empty
+// cell. With `{ text: true }`, values that a spreadsheet could read as a formula get a leading
+// apostrophe first (plain numbers such as `-5` are left alone).
+export function csvCell(value, { text = false } = {}) {
+  if (value == null) return '';
+  let out = String(value);
+  if (text && FORMULA_START.test(out) && !PLAIN_NUMBER.test(out)) {
+    out = `'${out}`;
+  }
+  return /[",\r\n]/.test(out) ? `"${out.replace(/"/g, '""')}"` : out;
+}
