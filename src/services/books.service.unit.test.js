@@ -29,17 +29,22 @@ describe('listBooks', () => {
     );
     const { select } = prisma.book.findMany.mock.calls[0][0];
     expect(select).not.toHaveProperty('summary');
-    expect(select).not.toHaveProperty('pdfUrl');
+    expect(select).toHaveProperty('pageCount', true);
     expect(select).toHaveProperty('id', true);
     expect(select).toHaveProperty('title', true);
     expect(select).toHaveProperty('uploadedBy', true);
     expect(select).toHaveProperty('uploadedAt', true);
   });
 
-  it('returns whatever the database returns', async () => {
-    const rows = [{ id: 1, title: 'Clean Code' }];
-    prisma.book.findMany.mockResolvedValue(rows);
-    expect(await listBooks()).toBe(rows);
+  it('derives hasPdf and never returns pdfUrl', async () => {
+    prisma.book.findMany.mockResolvedValue([
+      { id: 1, title: 'Clean Code', pdfUrl: null },
+      { id: 2, title: 'Refactoring', pdfUrl: 'https://example.com/r.pdf' },
+    ]);
+    expect(await listBooks()).toEqual([
+      { id: 1, title: 'Clean Code', hasPdf: false },
+      { id: 2, title: 'Refactoring', hasPdf: true },
+    ]);
   });
 });
 
@@ -66,7 +71,7 @@ describe('getBookById', () => {
   it('returns the book record when found', async () => {
     const book = { id: 1, title: 'Clean Code', summary: '...', pdfUrl: null };
     prisma.book.findUnique.mockResolvedValue(book);
-    expect(await getBookById(1)).toBe(book);
+    expect(await getBookById(1)).toEqual({ ...book, hasPdf: false });
   });
 });
 
@@ -94,7 +99,7 @@ describe('createBook', () => {
   it('returns the created book record', async () => {
     const created = { id: 10, title: 'New Book' };
     tx.book.create.mockResolvedValue(created);
-    expect(await createBook(DATA, ACTOR)).toBe(created);
+    expect(await createBook(DATA, ACTOR)).toMatchObject({ ...created, hasPdf: false });
   });
 });
 

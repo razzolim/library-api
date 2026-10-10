@@ -33,6 +33,7 @@ describe('POST /api/auth/login', () => {
       fullName: 'Demo Reader',
       role: 'demo.user',
       locale: expect.any(String),
+      readerPreferences: { pageTheme: 'light', zoom: 'fit-width' },
     });
     expect(res.body.user.password).toBeUndefined();
   });

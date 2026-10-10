@@ -12,21 +12,30 @@ const LIST_FIELDS = {
   status: true,
   isbn: true,
   coverColor: true,
+  pageCount: true,
   uploadedBy: true,
   uploadedAt: true,
 };
 
-export function listBooks() {
-  return prisma.book.findMany({ orderBy: { id: 'asc' }, select: LIST_FIELDS });
-}
-
+// `pdfUrl` is selected so `hasPdf` can be derived, but only the detail view returns it.
+const SELECT_LIST = { ...LIST_FIELDS, pdfUrl: true };
 const DETAIL_FIELDS = { ...LIST_FIELDS, summary: true, pdfUrl: true };
 
-export function getBookById(id) {
+function withHasPdf({ pdfUrl, ...book }, includePdfUrl) {
+  return { ...book, ...(includePdfUrl ? { pdfUrl } : {}), hasPdf: pdfUrl != null };
+}
+
+export async function listBooks() {
+  const books = await prisma.book.findMany({ orderBy: { id: 'asc' }, select: SELECT_LIST });
+  return books.map((book) => withHasPdf(book, false));
+}
+
+export async function getBookById(id) {
   if (!Number.isInteger(id)) {
     return null;
   }
-  return prisma.book.findUnique({ where: { id }, select: DETAIL_FIELDS });
+  const book = await prisma.book.findUnique({ where: { id }, select: DETAIL_FIELDS });
+  return book && withHasPdf(book, true);
 }
 
 const DEFAULT_COVER_COLOR = '#4a5568';
@@ -134,10 +143,11 @@ export function validateNewBook(body) {
 
 export async function createBook(data, actor, context = {}) {
   return prisma.$transaction(async (tx) => {
-    const book = await tx.book.create({
+    const created = await tx.book.create({
       data: { ...data, uploadedBy: actor.username },
       select: DETAIL_FIELDS,
     });
+    const book = withHasPdf(created, true);
     await recordAudit(tx, {
       actorUserId: actor.sub,
       action: 'book.create',

@@ -1,6 +1,6 @@
 // Minimal in-memory fixed-window limiter, keyed by authenticated user id. Per-process state is
 // enough for a single instance; swap for a shared store if the API is ever scaled out.
-export function rateLimitPerUser({ max, windowMs }) {
+export function rateLimitPerUser({ max, windowMs, errorKey = 'admin.rateLimited' }) {
   const hits = new Map();
 
   return (req, res, next) => {
@@ -16,7 +16,7 @@ export function rateLimitPerUser({ max, windowMs }) {
     entry.count += 1;
     if (entry.count > max) {
       res.set('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
-      return res.status(429).json({ success: false, errorKey: 'admin.rateLimited' });
+      return res.status(429).json({ success: false, errorKey });
     }
     return next();
   };

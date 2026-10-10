@@ -9,17 +9,21 @@ export async function getMe(req, res, next) {
   }
 }
 
-export async function updateLocale(req, res, next) {
+export async function updateMe(req, res, next) {
   try {
-    const { locale } = req.body ?? {};
-    if (!locale) {
+    const { locale, readerPreferences } = req.body ?? {};
+    if (!locale && readerPreferences === undefined) {
       return res.status(400).json({ success: false, errorKey: 'me.updateLocale.missingLocale' });
     }
-    const profile = await usersService.updateLocale(req.user.sub, locale);
-    return res.status(200).json(profile);
+    const profile = await usersService.updateMe(req.user.sub, { locale: locale || undefined, readerPreferences });
+    // `success` + `readerPreferences` are the reader spec §4 response; the rest is the existing profile.
+    return res.status(200).json(readerPreferences === undefined ? profile : { success: true, ...profile });
   } catch (err) {
     if (err.code === 'UNSUPPORTED_LOCALE') {
       return res.status(400).json({ success: false, errorKey: 'me.updateLocale.unsupportedLocale' });
+    }
+    if (err.code === 'INVALID_READER_PREFERENCES') {
+      return res.status(400).json({ success: false, errorKey: 'reader.invalidPreferences' });
     }
     return next(err);
   }

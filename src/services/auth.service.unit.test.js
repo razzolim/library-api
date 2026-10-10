@@ -72,6 +72,7 @@ describe('login', () => {
       fullName: 'Alice Example',
       role: 'reader',
       locale: 'en',
+      readerPreferences: { pageTheme: 'light', zoom: 'fit-width' },
     });
   });
 
