@@ -25,6 +25,8 @@ model User {
   // Tokens issued at or before this instant are rejected (admin password reset
   // signs the target out everywhere). Null = no cutoff. See ADR "Admin Area".
   sessionsValidAfter DateTime? @map("sessions_valid_after")
+  // Set on every successful login. Null = never logged in.
+  lastLoginAt DateTime? @map("last_login_at")
 
   @@map("user")
 }

@@ -21,6 +21,7 @@ function toPublicUser(user) {
     email: user.email ?? null,
     role: user.role,
     enabled: user.isActive,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
   };
 }
 
@@ -51,7 +52,8 @@ export async function listUsers(params) {
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`
-      SELECT id, username, full_name AS "fullName", email, role, is_active AS "enabled"
+      SELECT id, username, full_name AS "fullName", email, role, is_active AS "enabled",
+             last_login_at AS "lastLoginAt"
       FROM "user" ${where}
       ORDER BY LOWER(full_name), id
       LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
@@ -59,7 +61,11 @@ export async function listUsers(params) {
   ]);
 
   return {
-    items: rows.map((row) => ({ ...row, email: row.email ?? null })),
+    items: rows.map((row) => ({
+      ...row,
+      email: row.email ?? null,
+      lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
+    })),
     total: Number(countRows[0].total),
     page,
     pageSize,
