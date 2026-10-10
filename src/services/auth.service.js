@@ -21,6 +21,8 @@ export async function login(username, password, rememberMe = false) {
     throw err;
   }
 
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
   const claims = { sub: user.id, username: user.username, role: user.role };
   const accessToken = signAccessToken(claims);
   const refreshToken = signRefreshToken(claims, rememberMe);

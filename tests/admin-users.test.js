@@ -63,7 +63,7 @@ describe('GET /api/admin/users', () => {
     expect(res.body.items.map((u) => u.username)).toEqual(['au-alice', 'au-bob']);
     expect(res.body.items[0]).toEqual({
       id: expect.any(Number), username: 'au-alice', fullName: 'Alice Au',
-      email: 'alice@au.test', role: 'reader', enabled: true,
+      email: 'alice@au.test', role: 'reader', enabled: true, lastLoginAt: null,
     });
   });
 

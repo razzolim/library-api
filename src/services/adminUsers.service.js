@@ -21,6 +21,7 @@ function toPublicUser(user) {
     email: user.email ?? null,
     role: user.role,
     enabled: user.isActive,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
   };
 }
 

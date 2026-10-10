@@ -532,7 +532,7 @@ The new password is bcrypt-hashed. The target's existing access and refresh toke
 
 ### 5.3 Admin: User Management
 
-Full contract: the frontend repo's `documents/backend-spec-admin-users.md`. All routes require the admin role (`403` + `admin.forbidden` otherwise). Public user shape: `{ id, username, fullName, email, role, enabled }`.
+Full contract: the frontend repo's `documents/backend-spec-admin-users.md`. All routes require the admin role (`403` + `admin.forbidden` otherwise). Public user shape: `{ id, username, fullName, email, role, enabled, lastLoginAt }` (`lastLoginAt` is an ISO-8601 timestamp of the last successful login, or `null` if the user never logged in).
 
 | Endpoint | Behavior |
 |---|---|

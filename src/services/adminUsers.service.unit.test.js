@@ -68,7 +68,7 @@ describe('updateUser', () => {
     expect(recordAudit).toHaveBeenCalledWith(
       tx, expect.objectContaining({ action: 'user.disable', targetId: 3, metadata: {}, ip: '1.1.1.1' }),
     );
-    expect(user).toEqual({ id: 3, username: 'alice', fullName: 'Alice', email: 'a@x.org', role: 'reader', enabled: false });
+    expect(user).toEqual({ id: 3, username: 'alice', fullName: 'Alice', email: 'a@x.org', role: 'reader', enabled: false, lastLoginAt: null });
     expect(user).not.toHaveProperty('password');
   });
 
