@@ -87,6 +87,48 @@ export async function deactivateUser(targetId) {
 
 const SUPPORTED_LOCALES = ['en', 'pt-BR'];
 
+const DEFAULT_READER_PREFERENCES = { pageTheme: 'light', zoom: 'fit-width' };
+const PAGE_THEMES = ['light', 'dark'];
+const ZOOM_PRESETS = ['fit-width', 'fit-page'];
+
+// Stored value (possibly null or partial) + defaults -> the full preferences object.
+export function resolveReaderPreferences(stored) {
+  return { ...DEFAULT_READER_PREFERENCES, ...(stored ?? {}) };
+}
+
+// Returns the validated patch, or null for unknown keys / bad values (reader spec §4).
+export function validateReaderPreferences(input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+  const patch = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (key === 'pageTheme' && PAGE_THEMES.includes(value)) {
+      patch.pageTheme = value;
+    } else if (
+      key === 'zoom' &&
+      (ZOOM_PRESETS.includes(value) || (typeof value === 'number' && Number.isFinite(value) && value >= 50 && value <= 400))
+    ) {
+      patch.zoom = value;
+    } else {
+      return null;
+    }
+  }
+  return patch;
+}
+
+function toProfile(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    locale: user.locale,
+    preferences: { locale: user.locale },
+    readerPreferences: resolveReaderPreferences(user.readerPreferences),
+  };
+}
+
 export async function getMe(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
@@ -94,34 +136,39 @@ export async function getMe(userId) {
     err.code = 'USER_NOT_FOUND';
     throw err;
   }
-  return {
-    id: user.id,
-    username: user.username,
-    fullName: user.fullName,
-    role: user.role,
-    locale: user.locale,
-    preferences: { locale: user.locale },
-  };
+  return toProfile(user);
 }
 
-export async function updateLocale(userId, locale) {
-  if (!SUPPORTED_LOCALES.includes(locale)) {
+// Applies whichever of `locale` / `readerPreferences` were sent (a partial readerPreferences is
+// merged into the stored one). Everything is validated before anything is written.
+export async function updateMe(userId, { locale, readerPreferences }) {
+  if (locale !== undefined && !SUPPORTED_LOCALES.includes(locale)) {
     const err = new Error('Unsupported locale');
     err.code = 'UNSUPPORTED_LOCALE';
     throw err;
   }
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { locale },
+  let patch;
+  if (readerPreferences !== undefined) {
+    patch = validateReaderPreferences(readerPreferences);
+    if (!patch) {
+      const err = new Error('Invalid reader preferences');
+      err.code = 'INVALID_READER_PREFERENCES';
+      throw err;
+    }
+  }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const data = {};
+    if (locale !== undefined) {
+      data.locale = locale;
+    }
+    if (patch) {
+      const current = await tx.user.findUnique({ where: { id: userId }, select: { readerPreferences: true } });
+      data.readerPreferences = { ...resolveReaderPreferences(current?.readerPreferences), ...patch };
+    }
+    return tx.user.update({ where: { id: userId }, data });
   });
-  return {
-    id: user.id,
-    username: user.username,
-    fullName: user.fullName,
-    role: user.role,
-    locale: user.locale,
-    preferences: { locale: user.locale },
-  };
+  return toProfile(user);
 }
 
 export async function changePassword(userId, currentPassword, newPassword) {
