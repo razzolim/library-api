@@ -61,9 +61,11 @@ describe('GET /api/admin/users', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ total: 2, page: 1, pageSize: 2 });
     expect(res.body.items.map((u) => u.username)).toEqual(['au-alice', 'au-bob']);
+    expect(res.body.items[1].lastLoginAt).toBeNull(); // bob never logged in
     expect(res.body.items[0]).toEqual({
       id: expect.any(Number), username: 'au-alice', fullName: 'Alice Au',
-      email: 'alice@au.test', role: 'reader', enabled: true, lastLoginAt: null,
+      email: 'alice@au.test', role: 'reader', enabled: true,
+      lastLoginAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/), // alice logs in during beforeAll
     });
   });
 
