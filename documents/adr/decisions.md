@@ -88,3 +88,9 @@ Every admin action writes a row to `audit_log` inside the same transaction as th
 **Preferences:** only user-set values are stored; defaults (`light`, `fit-width`) are filled in on read, so changing a default later doesn't require a backfill. `PATCH /me` now accepts `locale`, `readerPreferences` or both, validates everything before writing, and merges a partial `readerPreferences` into the stored one.
 
 **Rate limits:** 60/min on the PDF endpoint, 30/min on `PUT /progress`, per user, using the existing in-memory limiter (now with a configurable `errorKey`; reader limits answer `reader.rateLimited`).
+
+---
+
+## Admin Feature Flags
+
+**Decision:** Implements `backend-spec-admin-feature-flags.md` (library-portal repo). Changeset 014 adds `feature_flag` keyed by the flag `key` (immutable, so no surrogate id). `updated_by` is a plain username with no FK, like `uploaded_by` on books, so flags outlive the admin who last touched them. Create, toggle and delete write `admin.feature_flag.*` audit entries in the same transaction; a PATCH that doesn't change `enabled` is a no-op (no audit entry, `updatedAt` untouched). The spec doesn't name a code for a malformed `description`/`enabled`, so those return `422 admin.featureFlags.invalidFields`. Writes share the 60/min `/admin` mutation limiter. Nothing in the portal reads flags yet; add a read path when one does.
